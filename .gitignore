@@ -1,0 +1,23 @@
+# dependencies
+/node_modules/
+
+# DNV
+/.dnv
+.dnv
+
+# next.js
+/.next/
+/out/
+/build/
+
+# environment
+.env*
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# misc
+.DS_Store
