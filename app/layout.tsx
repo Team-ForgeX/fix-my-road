@@ -3,9 +3,9 @@ import "./globals.css";
 import { AuthProvider } from "../components/AuthContext";
 
 export const metadata: Metadata = {
-  title: "Fix My Road | Citizen issue reporting platform",
+  title: "fix-my-roads | Citizen issue reporting platform",
   description:
-    "Fix My Road helps citizens report local infrastructure problems like potholes, garbage, streetlight outages, and water leaks. Track issue resolution and improve public accountability.",
+    "fix-my-roads helps citizens report local infrastructure problems like potholes, garbage, streetlight outages, and water leaks. Track issue resolution and improve public accountability.",
   keywords: [
     "civic issue reporting",
     "pothole reporting",
@@ -17,20 +17,20 @@ export const metadata: Metadata = {
     "community issue tracker",
     "citizen reporting platform"
   ],
-  applicationName: "Fix My Road",
+  applicationName: "fix-my-roads",
   openGraph: {
-    title: "Fix My Road | Report local infrastructure issues",
+    title: "fix-my-roads | Report local infrastructure issues",
     description:
-      "Fix My Road helps citizens report potholes, garbage, water leaks and other public infrastructure problems, then track resolution progress.",
+      "fix-my-roads helps citizens report potholes, garbage, water leaks and other public infrastructure problems, then track resolution progress.",
     type: "website",
-    siteName: "Fix My Road"
+    siteName: "fix-my-roads"
   },
   twitter: {
     card: "summary_large_image",
-    title: "Fix My Road | Report local infrastructure issues",
+    title: "fix-my-roads | Report local infrastructure issues",
     description:
       "Submit and track community reports for potholes, streetlight failures, garbage, and other municipal issues.",
-    creator: "@FixMyRoad"
+    creator: "@fix-my-roads"
   },
   robots: {
     index: true,

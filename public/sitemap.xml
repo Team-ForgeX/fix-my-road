@@ -1,39 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://fix-my-road.netlify.app/</loc>
+    <loc>https://fix-my-roads.netlify.app/</loc>
     <priority>1.00</priority>
   </url>
   <url>
-    <loc>https://fix-my-road.netlify.app/login</loc>
+    <loc>https://fix-my-roads.netlify.app/login</loc>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://fix-my-road.netlify.app/signup</loc>
+    <loc>https://fix-my-roads.netlify.app/signup</loc>
     <priority>0.80</priority>
   </url>
   <url>
-    <loc>https://fix-my-road.netlify.app/dashboard</loc>
+    <loc>https://fix-my-roads.netlify.app/dashboard</loc>
     <priority>0.75</priority>
   </url>
   <url>
-    <loc>https://fix-my-road.netlify.app/report</loc>
+    <loc>https://fix-my-roads.netlify.app/report</loc>
     <priority>0.75</priority>
   </url>
   <url>
-    <loc>https://fix-my-road.netlify.app/reports</loc>
+    <loc>https://fix-my-roads.netlify.app/reports</loc>
     <priority>0.70</priority>
   </url>
   <url>
-    <loc>https://fix-my-road.netlify.app/profile</loc>
+    <loc>https://fix-my-roads.netlify.app/profile</loc>
     <priority>0.70</priority>
   </url>
   <url>
-    <loc>https://fix-my-road.netlify.app/verify</loc>
+    <loc>https://fix-my-roads.netlify.app/verify</loc>
     <priority>0.60</priority>
   </url>
   <url>
-    <loc>https://fix-my-road.netlify.app/admin</loc>
+    <loc>https://fix-my-roads.netlify.app/admin</loc>
     <priority>0.50</priority>
   </url>
 </urlset>
