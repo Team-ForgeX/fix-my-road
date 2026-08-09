@@ -131,6 +131,26 @@ export default function HomePage() {
             </ul>
           </div>
         </section>
+
+        <section className="mt-20 rounded-[2rem] border border-slate-800/80 bg-slate-900/80 p-10 shadow-soft">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Explore fix-my-roads</p>
+              <h2 className="mt-3 text-3xl font-semibold text-white">Quick links for every citizen report flow</h2>
+              <p className="mt-4 max-w-2xl text-slate-400">
+                Visit key pages directly to sign up, log in, submit a report, or view your dashboard. These internal links help search engines discover your site structure and make the platform easier to use.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <a href="/signup" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Sign up</a>
+              <a href="/login" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Login</a>
+              <a href="/report" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Report an issue</a>
+              <a href="/dashboard" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Dashboard</a>
+              <a href="/reports" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Reports overview</a>
+              <a href="/profile" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Profile</a>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   );
