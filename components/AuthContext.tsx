@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { currentUser as defaultCurrentUser, reports as seedReports } from "../lib/mockData";
-import type { Report } from "../types/report";
+import type { MediaType, Report } from "../types/report";
 import type { UserProfile } from "../types/user";
 
 type StoredUser = UserProfile & {
@@ -99,9 +99,8 @@ const pickSeverity = (text: string) => {
 const createMediaItems = async (files: File[], reportId: string) => {
   const results = await Promise.all(
     files.map(async (file) => {
-      const type = file.type.startsWith("image") ? "image" : "video";
+      const type: MediaType = file.type.startsWith("image") ? "image" : "video";
       let thumbnail_url = "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=600&q=80";
-
       if (type === "image") {
         thumbnail_url = await new Promise<string>((resolve) => {
           const reader = new FileReader();

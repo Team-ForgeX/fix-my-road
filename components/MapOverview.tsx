@@ -13,7 +13,7 @@ const bounds = {
 
 const toPercent = (value: number, min: number, max: number) => Math.min(100, Math.max(0, ((value - min) / (max - min)) * 100));
 
-const severityColor: Record<Report["severity"], string> = {
+const severityColor: Record<Exclude<Report["severity"], undefined>, string> = {
   low: "bg-emerald-500/90",
   medium: "bg-amber-400/90",
   high: "bg-rose-500/90"
