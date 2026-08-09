@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "../components/AuthContext";
+import { Footer } from "../components/Footer";
 
 export const metadata: Metadata = {
   title: "fix-my-roads | Citizen issue reporting platform",
@@ -49,7 +50,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          {children}
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );

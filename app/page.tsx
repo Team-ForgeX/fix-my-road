@@ -142,12 +142,12 @@ export default function HomePage() {
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <a href="/signup" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Sign up</a>
-              <a href="/login" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Login</a>
-              <a href="/report" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Report an issue</a>
-              <a href="/dashboard" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Dashboard</a>
-              <a href="/reports" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Reports overview</a>
-              <a href="/profile" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Profile</a>
+              <Link href="/signup" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Sign up</Link>
+              <Link href="/login" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Login</Link>
+              <Link href="/report" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Report an issue</Link>
+              <Link href="/dashboard" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Dashboard</Link>
+              <Link href="/reports" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Reports overview</Link>
+              <Link href="/profile" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Profile</Link>
             </div>
           </div>
         </section>
