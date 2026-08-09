@@ -1,13 +1,16 @@
 "use client";
 
+"use client";
+
 import { useMemo, useState } from "react";
 import { Input } from "../ui/Input";
 import { Textarea } from "../ui/Textarea";
 import { Button } from "../ui/Button";
-import { MediaUpload, SelectedFile } from "./MediaUpload";
+import { MediaUpload } from "./MediaUpload";
 import { LocationPicker } from "./LocationPicker";
 import { Card } from "../ui/Card";
 import { CheckCircle2 } from "lucide-react";
+import { useAuth } from "../AuthContext";
 
 const initialLocation = {
   address: "",
@@ -18,6 +21,7 @@ const initialLocation = {
 };
 
 export function ReportForm() {
+  const { saveReport } = useAuth();
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
@@ -25,9 +29,11 @@ export function ReportForm() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setSubmitError(null);
     const validationErrors: string[] = [];
 
     if (!description.trim()) {
@@ -41,8 +47,14 @@ export function ReportForm() {
     if (validationErrors.length > 0) return;
 
     setSubmitting(true);
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const result = await saveReport({ title, description, mediaFiles, location });
     setSubmitting(false);
+
+    if (!result.success) {
+      setSubmitError(result.error ?? "Unable to submit report.");
+      return;
+    }
+
     setSubmitted(true);
   };
 
@@ -115,6 +127,12 @@ export function ReportForm() {
           </ul>
         </div>
       )}
+
+      {submitError ? (
+        <div className="rounded-3xl border border-rose-500/20 bg-rose-500/10 p-4 text-sm text-rose-100">
+          {submitError}
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

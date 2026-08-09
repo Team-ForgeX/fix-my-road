@@ -23,12 +23,19 @@ export function LocationPicker({
   const [pincode, setPincode] = useState("110001");
 
   const useCurrentLocation = () => {
-    setAddress("Near Bus Stop, Oak Street");
-    setLandmark("Bus stop");
-    setCity("New Delhi");
-    setStateValue("Delhi");
-    setPincode("110001");
-    onChange({ address, landmark, city, state: stateValue, pincode });
+    const nextLocation = {
+      address: "Near Bus Stop, Oak Street",
+      landmark: "Bus stop",
+      city: "New Delhi",
+      state: "Delhi",
+      pincode: "110001"
+    };
+    setAddress(nextLocation.address);
+    setLandmark(nextLocation.landmark);
+    setCity(nextLocation.city);
+    setStateValue(nextLocation.state);
+    setPincode(nextLocation.pincode);
+    onChange(nextLocation);
   };
 
   return (

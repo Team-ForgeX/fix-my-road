@@ -1,22 +1,50 @@
-import { notFound } from "next/navigation";
+"use client";
+
+import { useEffect } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { Navbar } from "../../../components/navbar/Navbar";
 import { ReportTimeline } from "../../../components/report/ReportTimeline";
-import { reports } from "../../../lib/mockData";
+import { useAuth } from "../../../components/AuthContext";
+import { Button } from "../../../components/ui/Button";
+import { Card } from "../../../components/ui/Card";
 
-type Params = {
-  params: {
-    id: string;
-  };
-};
+export default function ReportDetailsPage() {
+  const params = useParams();
+  const router = useRouter();
+  const { user, ready, reports } = useAuth();
+  const reportId = params?.id as string;
+  const report = reports.find((item) => item.id === reportId);
 
-export default function ReportDetailsPage({ params }: Params) {
-  const report = reports.find((item) => item.id === params.id);
-  if (!report) return notFound();
+  useEffect(() => {
+    if (!ready) return;
+    if (!user) {
+      router.replace("/login");
+    }
+  }, [ready, router, user]);
+
+  if (!ready || !user) {
+    return <div className="min-h-screen bg-slate-950" />;
+  }
+
+  if (!report || report.user_id !== user.id) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white">
+        <Navbar />
+        <main className="mx-auto max-w-4xl px-6 py-10 lg:px-8">
+          <Card className="space-y-6 p-10 text-center">
+            <p className="text-lg text-slate-400">Report not found or you do not have access to it.</p>
+            <Button onClick={() => router.push("/reports")}>Back to my reports</Button>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />
-      <main className="mx-auto max-w-5xl px-6 py-10 lg:px-8">
+      <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
         <div className="space-y-8">
           <div className="rounded-[2rem] border border-slate-800/80 bg-slate-900/80 p-8 shadow-soft">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
