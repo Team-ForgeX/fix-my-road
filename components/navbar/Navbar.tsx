@@ -8,8 +8,10 @@ import { useAuth } from "../AuthContext";
 
 const navLinks = [
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Report", href: "/report" },
-  { label: "My Reports", href: "/reports" }
+  { label: "Report Issue", href: "/report" },
+  { label: "My Reports", href: "/reports" },
+  { label: "Nearby Issues", href: "/nearby" },
+  { label: "Notifications", href: "/notifications" }
 ];
 
 export function Navbar() {
@@ -18,17 +20,21 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/95 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-4">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
         <Link href="/" className="font-semibold text-white">
-          Fix My Road
+          fix-my-roads
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex">
-          {navLinks.map((link) => (
-            <Link key={link.href} href={link.href} className="text-slate-300 hover:text-white">
-              {link.label}
-            </Link>
-          ))}
+        <nav className="hidden items-center gap-6 md:flex" aria-label="Primary navigation">
+          <ul className="flex flex-wrap items-center gap-6">
+            {navLinks.map((link) => (
+              <li key={link.href}>
+                <Link href={link.href} className="text-slate-300 transition hover:text-white">
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
         </nav>
 
         <div className="flex items-center gap-3">

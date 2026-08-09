@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import { Navbar } from "../../components/navbar/Navbar";
 import { ReportCard } from "../../components/report/ReportCard";
 import { reports } from "../../lib/mockData";
+
+export const metadata: Metadata = {
+  title: "My Reports | fix-my-roads",
+  description: "View and filter your submitted civic issue reports with status, severity, and location.",
+};
 
 export default function ReportsPage() {
   return (

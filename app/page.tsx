@@ -147,6 +147,8 @@ export default function HomePage() {
               <Link href="/report" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Report an issue</Link>
               <Link href="/dashboard" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Dashboard</Link>
               <Link href="/reports" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Reports overview</Link>
+              <Link href="/nearby" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Nearby issues</Link>
+              <Link href="/notifications" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Notifications</Link>
               <Link href="/profile" className="rounded-3xl border border-slate-800/80 bg-slate-950/80 px-5 py-4 text-sm font-semibold text-white transition hover:border-teal-400 hover:text-teal-300">Profile</Link>
             </div>
           </div>

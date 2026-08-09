@@ -4,6 +4,7 @@ import { AuthProvider } from "../components/AuthContext";
 import { Footer } from "../components/Footer";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://fix-my-roads.netlify.app"),
   title: "fix-my-roads | Citizen issue reporting platform",
   description:
     "fix-my-roads helps citizens report local infrastructure problems like potholes, garbage, streetlight outages, and water leaks. Track issue resolution and improve public accountability.",

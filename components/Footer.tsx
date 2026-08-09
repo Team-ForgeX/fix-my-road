@@ -26,6 +26,12 @@ export function Footer() {
           <Link href="/reports" className="text-sm font-semibold text-slate-200 hover:text-teal-300">
             Reports
           </Link>
+          <Link href="/nearby" className="text-sm font-semibold text-slate-200 hover:text-teal-300">
+            Nearby issues
+          </Link>
+          <Link href="/notifications" className="text-sm font-semibold text-slate-200 hover:text-teal-300">
+            Notifications
+          </Link>
           <Link href="/profile" className="text-sm font-semibold text-slate-200 hover:text-teal-300">
             Profile
           </Link>
