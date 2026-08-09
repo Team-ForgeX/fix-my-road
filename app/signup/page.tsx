@@ -1,18 +1,23 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Navbar } from "../../components/navbar/Navbar";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Card } from "../../components/ui/Card";
+import { useAuth } from "../../components/AuthContext";
 
 export default function SignupPage() {
+  const router = useRouter();
+  const { user, ready, signup } = useAuth();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const validation = useMemo(() => {
     return {
@@ -20,6 +25,21 @@ export default function SignupPage() {
       completed: fullName.trim() !== "" && email.trim() !== "" && phone.trim() !== "" && password.trim() !== "" && confirmPassword.trim() !== ""
     };
   }, [confirmPassword, email, fullName, password, phone]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    if (!validation.completed || !validation.passwordsMatch) {
+      setError("Please complete all fields and ensure passwords match.");
+      return;
+    }
+    const result = await signup({ full_name: fullName, email, phone, password });
+    if (!result.success) {
+      setError(result.error ?? "Unable to create account.");
+      return;
+    }
+    router.push("/verify");
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -32,7 +52,7 @@ export default function SignupPage() {
             <p className="mt-2 text-slate-400">Sign up to submit issues, follow updates, and see incident progress in your area.</p>
           </div>
 
-          <form className="space-y-6">
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">Full name</label>
@@ -60,6 +80,7 @@ export default function SignupPage() {
             {!validation.passwordsMatch && confirmPassword.length > 0 ? (
               <p className="text-sm text-rose-300">Passwords do not match.</p>
             ) : null}
+            {error ? <p className="text-sm text-rose-300">{error}</p> : null}
             <Button type="submit" disabled={!validation.completed || !validation.passwordsMatch} className="w-full">
               Create account
             </Button>

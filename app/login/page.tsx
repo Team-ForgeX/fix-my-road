@@ -1,15 +1,42 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Navbar } from "../../components/navbar/Navbar";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Card } from "../../components/ui/Card";
+import { useAuth } from "../../components/AuthContext";
 
 export default function LoginPage() {
+  const router = useRouter();
+  const { user, ready, login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (user) {
+      router.replace(user.verified ? "/dashboard" : "/verify");
+    }
+  }, [ready, router, user]);
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError(null);
+    const result = await login(email, password);
+    if (!result.success) {
+      setError(result.error ?? "Unable to sign in.");
+      return;
+    }
+    if (result.needsVerification) {
+      router.push("/verify");
+      return;
+    }
+    router.push("/dashboard");
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -21,7 +48,7 @@ export default function LoginPage() {
             <h1 className="mt-3 text-3xl font-semibold text-white">Access your reports and updates</h1>
             <p className="mt-2 text-slate-400">Sign in to submit a new issue, review pending reports, and track incident progress.</p>
           </div>
-          <form className="space-y-6">
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-300">Email address</label>
               <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" />
@@ -35,6 +62,7 @@ export default function LoginPage() {
                 Forgot password?
               </Link>
             </div>
+            {error ? <p className="text-sm text-rose-300">{error}</p> : null}
             <Button type="submit" className="w-full">Login</Button>
           </form>
           <p className="text-center text-sm text-slate-400">

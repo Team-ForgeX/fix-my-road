@@ -1,7 +1,28 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Navbar } from "../../components/navbar/Navbar";
 import { ReportForm } from "../../components/report/ReportForm";
+import { useAuth } from "../../components/AuthContext";
 
 export default function ReportPage() {
+  const router = useRouter();
+  const { user, ready } = useAuth();
+
+  useEffect(() => {
+    if (!ready) return;
+    if (!user) {
+      router.replace("/login");
+    } else if (!user.verified) {
+      router.replace("/verify");
+    }
+  }, [ready, router, user]);
+
+  if (!ready || !user) {
+    return <div className="min-h-screen bg-slate-950" />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />

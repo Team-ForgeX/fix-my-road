@@ -33,7 +33,7 @@ export default function HomePage() {
                 Report issues in your neighborhood, verify impact, and help resolve public infrastructure problems faster.
               </h1>
               <p className="max-w-2xl text-lg text-slate-400">
-                Fix My Road helps citizens submit real-world reports for garbage, potholes, leaks, and streetlight failures. Each report stays tied to the person who filed it while the platform tracks shared incidents.
+                Fix My Road helps citizens submit real-world reports for garbage, potholes, water leaks, and streetlight outages. The platform makes local infrastructure issue reporting simple, while tracking issue status and incident resolution.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -56,7 +56,7 @@ export default function HomePage() {
                     </span>
                     <div>
                       <p className="font-semibold text-white">Report</p>
-                      <p className="text-sm text-slate-400">Submit the issue with location, description, and evidence.</p>
+                      <p className="text-sm text-slate-400">Submit the issue with location, description, and evidence for faster municipal response.</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
