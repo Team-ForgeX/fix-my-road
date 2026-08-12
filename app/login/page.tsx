@@ -217,16 +217,26 @@ export default function LoginPage() {
                   {isLoading ? "Verifying..." : "Admin Login"}
                 </Button>
               </form>
-              <p className="text-center text-sm text-slate-400">
-                Are you a citizen?{' '}
-                <button
-                  type="button"
-                  onClick={() => setMode("citizen")}
-                  className="font-semibold text-teal-300 hover:text-teal-200"
-                >
-                  Login as citizen
-                </button>
-              </p>
+              <div className="space-y-4">
+                <p className="text-center text-sm text-slate-400">
+                  Are you a citizen?{' '}
+                  <button
+                    type="button"
+                    onClick={() => setMode("citizen")}
+                    className="font-semibold text-teal-300 hover:text-teal-200"
+                  >
+                    Login as citizen
+                  </button>
+                </p>
+                <div className="border-t border-slate-700 pt-4">
+                  <p className="text-center text-sm text-slate-400">
+                    New admin?{' '}
+                    <Link href="/signup" className="font-semibold text-teal-300 hover:text-teal-200">
+                      Create admin account
+                    </Link>
+                  </p>
+                </div>
+              </div>
             </>
           )}
         </Card>
