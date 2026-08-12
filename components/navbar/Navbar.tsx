@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "../ui/Button";
 import { useAuth } from "../AuthContext";
 
-const navLinks = [
+const citizenNavLinks = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Report Issue", href: "/report" },
   { label: "My Reports", href: "/reports" },
@@ -14,9 +14,26 @@ const navLinks = [
   { label: "Notifications", href: "/notifications" }
 ];
 
+const adminNavLinks = [
+  { label: "Admin Panel", href: "/admin" },
+  { label: "Nearby Reports", href: "/nearby" },
+  { label: "Notifications", href: "/notifications" }
+];
+
 export function Navbar() {
-  const { user, adminMode, logout, adminLogout } = useAuth();
+  const { user, adminMode, logout, adminLogout, unreadNotificationCount } = useAuth();
   const router = useRouter();
+
+  const navLinks = adminMode ? adminNavLinks : citizenNavLinks;
+
+  const handleLogout = async () => {
+    if (adminMode) {
+      await adminLogout();
+    } else {
+      await logout();
+    }
+    router.push("/");
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/95 backdrop-blur-xl">
@@ -38,23 +55,43 @@ export function Navbar() {
         </nav>
 
         <div className="flex items-center gap-3">
-          <button className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-slate-300 hover:bg-slate-800">
+          <button
+            onClick={() => router.push("/notifications")}
+            className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-slate-300 hover:bg-slate-800 transition"
+            aria-label="Notifications"
+          >
             <Bell className="h-5 w-5" />
+            {unreadNotificationCount > 0 && (
+              <span className="absolute top-1 right-1 bg-red-600 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+              </span>
+            )}
           </button>
-          {adminMode ? (
-            <Button variant="ghost" className="hidden md:inline-flex" onClick={() => { adminLogout(); router.push("/"); }}>
-              Admin logout <LogOut className="ml-2 h-4 w-4" />
-            </Button>
-          ) : user ? (
-            <Button variant="ghost" className="hidden md:inline-flex" onClick={() => router.push("/profile")}> 
-              <User className="mr-2 h-4 w-4" />
-              Profile
-            </Button>
-          ) : (
+
+          {user && (
+            <div className="flex items-center gap-2">
+              {adminMode && (
+                <span className="text-xs font-semibold bg-teal-600/20 text-teal-300 px-2 py-1 rounded">
+                  Admin
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                className="hidden md:inline-flex text-sm"
+                onClick={handleLogout}
+              >
+                {adminMode ? "Admin Logout" : "Logout"}
+                <LogOut className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {!user && (
             <Button variant="ghost" className="hidden md:inline-flex" onClick={() => router.push("/login")}>
               Login
             </Button>
           )}
+
           <button className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-slate-300 hover:bg-slate-800 md:hidden">
             <Menu className="h-5 w-5" />
           </button>

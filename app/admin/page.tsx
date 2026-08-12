@@ -6,22 +6,24 @@ import { useAuth } from "../../components/AuthContext";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 import { Input } from "../../components/ui/Input";
+import { Navbar } from "../../components/navbar/Navbar";
 import type { Report } from "../../types/report";
 
 export default function AdminPage() {
-  const { user, adminMode, adminLogin, adminLogout, reports, updateReportStatus, ready } = useAuth();
+  const { user, adminMode, elevateToAdmin, adminLogout, reports, updateReportStatus, ready } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [adminCode, setAdminCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!ready) return;
-    if (!user) return;
-    if (!adminMode) {
-      router.replace("/dashboard");
+    if (!user) {
+      router.replace("/login");
+      return;
     }
-  }, [ready, adminMode, router, user]);
+    // Admin users can access the page, citizens will see elevation UI
+  }, [ready, router, user]);
 
   const recentReports = useMemo(() => reports.slice(0, 4), [reports]);
   const stats = useMemo(() => {
@@ -33,14 +35,27 @@ export default function AdminPage() {
     };
   }, [reports]);
 
-  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleElevateToAdmin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
-    const result = await adminLogin(email, password);
-    if (!result.success) {
-      setError(result.error ?? "Could not sign in as admin.");
-      return;
+    setIsLoading(true);
+    
+    try {
+      const result = await elevateToAdmin(adminCode);
+      if (!result.success) {
+        setError(result.error ?? "Could not elevate to admin.");
+        return;
+      }
+      setAdminCode("");
+      // Page will re-render with new admin role
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleAdminLogout = async () => {
+    await adminLogout();
+    router.push("/");
   };
 
   const handleAction = (report: Report, status: Report["status"]) => {
@@ -54,41 +69,61 @@ export default function AdminPage() {
   if (!adminMode) {
     return (
       <div className="min-h-screen bg-slate-950 text-white">
+        <Navbar />
         <main className="mx-auto flex min-h-[calc(100vh-96px)] max-w-3xl items-center px-6 py-12 lg:px-8">
           <Card className="w-full space-y-8 p-10">
             <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Admin sign in</p>
-              <h1 className="mt-3 text-3xl font-semibold text-white">City operations dashboard</h1>
-              <p className="mt-2 text-slate-400">Use the mock admin credentials to review reports, verify issues, and track status changes.</p>
+              <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Elevate to Admin</p>
+              <h1 className="mt-3 text-3xl font-semibold text-white">Access Admin Dashboard</h1>
+              <p className="mt-2 text-slate-400">
+                You are currently logged in as {user?.full_name}. To access the admin dashboard, please enter your admin access code.
+              </p>
             </div>
-            <form className="space-y-6" onSubmit={handleLogin}>
+            <form className="space-y-6" onSubmit={handleElevateToAdmin}>
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">Email address</label>
-                <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="admin@fixmyroad.local" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">Password</label>
-                <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="admin123" />
+                <label className="mb-2 block text-sm font-medium text-slate-300">Admin Access Code</label>
+                <Input
+                  type="password"
+                  value={adminCode}
+                  onChange={(event) => setAdminCode(event.target.value)}
+                  placeholder="Enter admin access code"
+                  disabled={isLoading}
+                />
+                <p className="mt-2 text-xs text-slate-500">
+                  Contact your administrator for the admin access code.
+                </p>
               </div>
               {error ? <p className="text-sm text-rose-300">{error}</p> : null}
-              <Button type="submit" className="w-full">Sign in</Button>
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? "Verifying..." : "Elevate to Admin"}
+              </Button>
             </form>
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={() => router.push("/dashboard")}
+            >
+              Return to Dashboard
+            </Button>
           </Card>
         </main>
       </div>
     );
   }
 
+  // Admin dashboard
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      <Navbar />
       <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
         <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Admin dashboard</p>
             <h1 className="mt-3 text-3xl font-semibold text-white">Verify reports and resolve incidents</h1>
-            <p className="mt-2 max-w-2xl text-slate-400">Review every incoming report, assign priorities, and track resolution status for the city’s infrastructure team.</p>
+            <p className="mt-2 max-w-2xl text-slate-400">Review incoming reports, assign priorities, and track resolution status for the city's infrastructure team.</p>
           </div>
-          <Button variant="secondary" onClick={adminLogout}>Logout</Button>
+          <Button variant="secondary" onClick={handleAdminLogout}>Admin Logout</Button>
         </div>
 
         <div className="mt-10 grid gap-4 md:grid-cols-4">
@@ -110,33 +145,66 @@ export default function AdminPage() {
           </Card>
         </div>
 
+        {/* Filter Options for Admin */}
+        <div className="mt-10">
+          <Card className="rounded-[2rem] border border-slate-800/80 bg-slate-900/50 p-6 shadow-soft">
+            <p className="mb-4 text-sm uppercase tracking-[0.3em] text-slate-300">Filter & Manage Reports</p>
+            <p className="text-sm text-slate-400">
+              Use the Notifications page to see alerts for new reports with filtering options by priority and location.
+            </p>
+          </Card>
+        </div>
+
         <div className="mt-10 space-y-6">
           <div className="rounded-[2rem] border border-slate-800/80 bg-slate-900/80 p-6 shadow-soft">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-300">Recent reports</p>
+            <p className="text-sm uppercase tracking-[0.3em] text-slate-300">Recent Reports</p>
             <div className="mt-6 space-y-4">
-              {recentReports.map((report) => (
-                <div key={report.id} className="rounded-3xl border border-slate-800/80 bg-slate-950/70 p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="font-semibold text-white">{report.title}</p>
-                      <p className="text-sm text-slate-400">{report.address}</p>
+              {recentReports.length === 0 ? (
+                <p className="text-sm text-slate-400">No reports yet.</p>
+              ) : (
+                recentReports.map((report) => (
+                  <div key={report.id} className="rounded-3xl border border-slate-800/80 bg-slate-950/70 p-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="font-semibold text-white">{report.title}</p>
+                        <p className="text-sm text-slate-400">{report.address}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {report.status === "open" && (
+                          <Button size="sm" onClick={() => handleAction(report, "in_progress")}>
+                            Verify
+                          </Button>
+                        )}
+                        {report.status === "in_progress" && (
+                          <Button size="sm" onClick={() => handleAction(report, "in_progress")}>
+                            Processing
+                          </Button>
+                        )}
+                        {report.status !== "resolved" && (
+                          <Button size="sm" variant="ghost" onClick={() => handleAction(report, "resolved")}>
+                            Resolve
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button size="sm" variant="secondary" onClick={() => handleAction(report, report.status === "open" ? "in_progress" : report.status)}>
-                        {report.status === "open" ? "Verify" : report.status === "in_progress" ? "Continue" : "View"}
-                      </Button>
-                      {report.status !== "resolved" ? (
-                        <Button size="sm" variant="ghost" onClick={() => handleAction(report, "resolved")}>Resolve</Button>
-                      ) : null}
+                    <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-400">
+                      <span className="px-2 py-1 bg-slate-800 rounded text-slate-300">
+                        {report.status.replace("_", " ")}
+                      </span>
+                      <span className={`px-2 py-1 rounded ${
+                        report.severity === "high"
+                          ? "bg-red-900/30 text-red-300"
+                          : report.severity === "medium"
+                          ? "bg-yellow-900/30 text-yellow-300"
+                          : "bg-blue-900/30 text-blue-300"
+                      }`}>
+                        Severity: {report.severity ?? "medium"}
+                      </span>
+                      <span>{new Date(report.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-400">
-                    <span>{report.status.replace("_", " ")}</span>
-                    <span>Severity: {report.severity ?? "medium"}</span>
-                    <span>{new Date(report.created_at).toLocaleDateString()}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

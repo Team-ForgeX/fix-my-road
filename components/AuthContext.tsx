@@ -27,6 +27,17 @@ type LocationPayload = {
   pincode: string;
 };
 
+export type AppNotification = {
+  id: string;
+  type: "report_submitted" | "report_updated" | "report_resolved" | "new_report_alert" | "system";
+  title: string;
+  message: string;
+  priority: "low" | "medium" | "high";
+  reportId?: string;
+  timestamp: string;
+  read: boolean;
+};
+
 type AuthContextValue = {
   user: AuthUser | null;
   adminMode: boolean;
@@ -37,10 +48,11 @@ type AuthContextValue = {
     email: string;
     phone: string;
     password: string;
-  }) => Promise<{ success: boolean; error?: string }>;
+  }) => Promise<{ success: boolean; error?: string; needsEmailVerification?: boolean; message?: string }>;
   verifyIdentity: (otp: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  adminLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  adminLogin: (email: string, password: string, adminCode: string) => Promise<{ success: boolean; error?: string }>;
+  elevateToAdmin: (adminCode: string) => Promise<{ success: boolean; error?: string }>;
   adminLogout: () => Promise<void>;
   reports: Report[];
   saveReport: (payload: {
@@ -51,11 +63,15 @@ type AuthContextValue = {
   }) => Promise<{ success: boolean; error?: string }>;
   updateReportStatus: (reportId: string, status: Report["status"]) => void;
   allReports: Report[];
-  notifications: string[];
+  notifications: AppNotification[];
+  unreadNotificationCount: number;
+  markNotificationAsRead: (notificationId: string) => void;
+  clearNotification: (notificationId: string) => void;
 };
 
 const STORAGE_KEYS = {
-  REPORTS: "fixmyroad_reports"
+  REPORTS: "fixmyroad_reports",
+  NOTIFICATIONS: "fixmyroad_notifications"
 };
 
 const pickSeverity = (text: string) => {
@@ -118,6 +134,10 @@ const initialReports = (): Report[] => {
   return persisted.length > 0 ? persisted : seedReports;
 };
 
+const initialNotifications = (): AppNotification[] => {
+  return readJson<AppNotification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
+};
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function buildAuthUser(profile: UserProfile, email: string): AuthUser {
@@ -139,6 +159,7 @@ async function loadProfile(userId: string, email: string) {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -174,6 +195,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     syncSession();
     setReports(initialReports());
+    setNotifications(initialNotifications());
 
     const subscription = supabase.auth.onAuthStateChange(async (_, session) => {
       if (!mounted) return;
@@ -205,6 +227,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     writeJson(STORAGE_KEYS.REPORTS, nextReports);
   };
 
+  const saveNotifications = (nextNotifications: AppNotification[]) => {
+    setNotifications(nextNotifications);
+    writeJson(STORAGE_KEYS.NOTIFICATIONS, nextNotifications);
+  };
+
   const login = async (email: string, password: string) => {
     const normalizedEmail = email.trim().toLowerCase();
     const result = await supabase.auth.signInWithPassword({
@@ -230,17 +257,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   };
 
+  const elevateUserToAdmin = async (userId: string, email: string, adminCode: string) => {
+    if (!adminCode.trim()) {
+      return { success: false, error: "Admin access code is required." };
+    }
+
+    const response = await fetch("/api/admin/elevate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: adminCode.trim() })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return { success: false, error: data.error ?? "Unable to verify admin code." };
+    }
+
+    const refreshed = await loadProfile(userId, email);
+    if (!refreshed.success || !refreshed.user) {
+      return { success: false, error: refreshed.error ?? "Unable to refresh profile." };
+    }
+
+    setUser(refreshed.user);
+    return { success: true };
+  };
+
+  const elevateToAdmin = async (adminCode: string) => {
+    if (!user) {
+      return { success: false, error: "You must be signed in to elevate account privileges." };
+    }
+    return elevateUserToAdmin(user.id, user.email, adminCode);
+  };
+
   const signup = async ({ full_name, email, phone, password }: { full_name: string; email: string; phone: string; password: string }) => {
     const normalizedEmail = email.trim().toLowerCase();
     const signUpResult = await supabase.auth.signUp({
       email: normalizedEmail,
-      password
+      password,
+      options: {
+        emailRedirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/verify`
+      }
     });
 
     if (signUpResult.error || !signUpResult.data?.user) {
       return { success: false, error: signUpResult.error?.message ?? "Unable to create account." };
     }
 
+    // Check if email confirmation is required (depends on Supabase settings)
+    // If email_confirmed_at is null, user needs to confirm email
+    if (!signUpResult.data.user.email_confirmed_at) {
+      // User needs to verify email - don't create profile yet
+      // They will be sent a confirmation email automatically
+      setUser(null);
+      return { 
+        success: true, 
+        needsEmailVerification: true,
+        message: "Account created! Please verify your email to complete signup. Check your inbox for verification link."
+      };
+    }
+
+    // If email is already confirmed (unlikely in normal flow), create profile
     const profileResult = await createCitizenProfile({
       id: signUpResult.data.user.id,
       full_name: full_name.trim(),
@@ -279,14 +355,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
-  const adminLogin = async (email: string, password: string) => {
+  const adminLogin = async (email: string, password: string, adminCode: string) => {
+    // First verify the admin code
+    if (!adminCode.trim()) {
+      return { success: false, error: "Admin access code is required." };
+    }
+
+    const response = await fetch("/api/admin/elevate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: adminCode.trim() })
+    });
+
+    const codeVerification = await response.json();
+    if (!response.ok || !codeVerification.success) {
+      return { success: false, error: codeVerification.error ?? "Invalid admin access code." };
+    }
+
+    // Then attempt login
     const result = await login(email, password);
     if (!result.success) {
       return result;
     }
     if (!result.user || result.user.role !== "admin") {
       await logout();
-      return { success: false, error: "Admin access required." };
+      return { success: false, error: "Admin access required. This account does not have admin privileges." };
     }
     return { success: true };
   };
@@ -338,8 +431,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       is_duplicate: false,
       media: thumbnailEntries
     };
+
+    // Create notification for citizen
+    const clientNotification: AppNotification = {
+      id: `N${Date.now()}`,
+      type: "report_submitted",
+      title: "Report Submitted",
+      message: `Your report "${report.title}" has been submitted and is awaiting verification.`,
+      priority: "medium",
+      reportId: report.id,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+
+    // Create notification for admin
+    const adminNotification: AppNotification = {
+      id: `N${Date.now() + 1}`,
+      type: "new_report_alert",
+      title: "New Report Alert",
+      message: `New ${report.severity} severity report: "${report.title}" in ${report.address}`,
+      priority: report.severity === "high" ? "high" : "medium",
+      reportId: report.id,
+      timestamp: new Date().toISOString(),
+      read: false
+    };
+
     const nextReports = [report, ...reports];
+    const nextNotifications = [clientNotification, adminNotification, ...notifications];
+
     saveReports(nextReports);
+    saveNotifications(nextNotifications);
+    
     return { success: true };
   };
 
@@ -350,32 +472,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       newStatus: status
     }).catch((err) => console.warn("Supabase admin action fallback:", err));
 
-    const nextReports = reports.map((report) => {
-      if (report.id !== reportId) return report;
-      const nextProcessing = status === "resolved" ? "resolved" : status === "in_progress" ? "assigned" : report.processing_state;
-      return { ...report, status, processing_state: nextProcessing };
+    const report = reports.find((r) => r.id === reportId);
+    const nextReports = reports.map((r) => {
+      if (r.id !== reportId) return r;
+      const nextProcessing = status === "resolved" ? "resolved" : status === "in_progress" ? "assigned" : r.processing_state;
+      return { ...r, status, processing_state: nextProcessing };
     });
     saveReports(nextReports);
+
+    // Create notification for the report owner
+    if (report) {
+      const stageText = status === "in_progress" ? "In Progress" : status === "resolved" ? "Resolved" : "Open";
+      const notification: AppNotification = {
+        id: `N${Date.now()}`,
+        type: status === "resolved" ? "report_resolved" : "report_updated",
+        title: status === "resolved" ? "Report Resolved" : "Report Update",
+        message: `Your report "${report.title}" has been updated to: ${stageText}`,
+        priority: status === "resolved" ? "high" : "medium",
+        reportId: reportId,
+        timestamp: new Date().toISOString(),
+        read: false
+      };
+      const nextNotifications = [notification, ...notifications];
+      saveNotifications(nextNotifications);
+    }
+  };
+
+  const markNotificationAsRead = (notificationId: string) => {
+    const nextNotifications = notifications.map((n) =>
+      n.id === notificationId ? { ...n, read: true } : n
+    );
+    saveNotifications(nextNotifications);
+  };
+
+  const clearNotification = (notificationId: string) => {
+    const nextNotifications = notifications.filter((n) => n.id !== notificationId);
+    saveNotifications(nextNotifications);
   };
 
   const adminMode = useMemo(() => user?.role === "admin", [user]);
 
-  const notifications = useMemo(() => {
+  const unreadNotificationCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
+
+  const filteredNotifications = useMemo(() => {
     if (adminMode) {
-      return reports
-        .filter((report) => report.status === "open")
-        .slice(0, 4)
-        .map((report) => `Open issue ${report.id} near ${report.address} needs admin review.`);
+      // Admin sees new report alerts and system messages
+      return notifications
+        .filter((n) => ["new_report_alert", "system"].includes(n.type))
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     }
     if (user) {
-      return reports
-        .filter((report) => report.user_id === user.id)
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 4)
-        .map((report) => `Your report ${report.id} is now ${report.status.replace("_", " ")}.`);
+      // Client sees notifications about their own reports
+      const userReportIds = reports.filter((r) => r.user_id === user.id).map((r) => r.id);
+      return notifications
+        .filter((n) => userReportIds.includes(n.reportId || ""))
+        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     }
     return [];
-  }, [adminMode, reports, user]);
+  }, [adminMode, notifications, reports, user]);
 
   const allReports = reports;
 
@@ -388,12 +545,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     verifyIdentity,
     logout,
     adminLogin,
+    elevateToAdmin,
     adminLogout,
     reports,
     saveReport,
     updateReportStatus,
     allReports,
-    notifications
+    notifications: filteredNotifications,
+    unreadNotificationCount,
+    markNotificationAsRead,
+    clearNotification
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

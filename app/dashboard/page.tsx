@@ -78,9 +78,10 @@ export default function DashboardPage() {
                     <p className="text-sm text-slate-400">No recent notifications yet.</p>
                   </div>
                 ) : (
-                  notifications.map((note) => (
-                    <div key={note} className="rounded-3xl border border-slate-800/80 bg-slate-950/80 p-4">
-                      <p className="text-sm text-slate-400">{note}</p>
+                  notifications.slice(0, 4).map((note) => (
+                    <div key={note.id} className="rounded-3xl border border-slate-800/80 bg-slate-950/80 p-4">
+                      <p className="text-sm font-medium text-slate-300">{note.title}</p>
+                      <p className="text-sm text-slate-400">{note.message}</p>
                     </div>
                   ))
                 )}
