@@ -17,6 +17,8 @@ export default function SignupPage() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isAdminAccount, setIsAdminAccount] = useState(false);
+  const [adminCode, setAdminCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [emailVerificationSent, setEmailVerificationSent] = useState(false);
@@ -41,7 +43,14 @@ export default function SignupPage() {
     }
 
     try {
-      const result = await signup({ full_name: fullName, email, phone, password });
+      const result = await signup({
+        full_name: fullName,
+        email,
+        phone,
+        password,
+        isAdmin: isAdminAccount,
+        adminCode
+      });
       
       if (!result.success) {
         setError(result.error ?? "Unable to create account.");
@@ -156,6 +165,32 @@ export default function SignupPage() {
                 />
               </div>
             </div>
+
+            <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
+              <label className="flex cursor-pointer items-center justify-between gap-4 text-sm text-slate-200">
+                <span>Create account as admin</span>
+                <input
+                  type="checkbox"
+                  checked={isAdminAccount}
+                  onChange={(event) => setIsAdminAccount(event.target.checked)}
+                  className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-teal-400 focus:ring-teal-500"
+                />
+              </label>
+            </div>
+
+            {isAdminAccount && (
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Admin access code</label>
+                <Input
+                  type="password"
+                  value={adminCode}
+                  onChange={(event) => setAdminCode(event.target.value)}
+                  placeholder="Enter admin access code"
+                  disabled={isLoading}
+                />
+                <p className="mt-2 text-xs text-slate-500">This code is required to create an admin account.</p>
+              </div>
+            )}
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">Email address</label>

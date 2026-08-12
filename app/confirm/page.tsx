@@ -28,7 +28,12 @@ export default function ConfirmPage() {
             const { data: newSession } = await supabase.auth.getSession();
             if (newSession?.session?.user && newSession.session.user.email_confirmed_at) {
               // Create profile
-              await createUserProfile(newSession.session.user.id, newSession.session.user.user_metadata?.full_name || "User");
+              await createUserProfile(
+                newSession.session.user.id,
+                newSession.session.user.user_metadata?.full_name || "User",
+                newSession.session.user.user_metadata?.role || "citizen",
+                newSession.session.user.user_metadata?.phone || null
+              );
               setStatus("success");
               setMessage("Email verified successfully! Redirecting to identity verification...");
               setTimeout(() => {
@@ -43,7 +48,9 @@ export default function ConfirmPage() {
         if (data.session.user.email_confirmed_at) {
           // Create profile with data from user metadata or session
           const fullName = data.session.user.user_metadata?.full_name || "User";
-          await createUserProfile(data.session.user.id, fullName);
+          const role = data.session.user.user_metadata?.role || "citizen";
+          const phone = data.session.user.user_metadata?.phone || null;
+          await createUserProfile(data.session.user.id, fullName, role, phone);
           
           setStatus("success");
           setMessage("Email verified successfully! Redirecting to identity verification...");
@@ -60,12 +67,12 @@ export default function ConfirmPage() {
       }
     };
 
-    const createUserProfile = async (userId: string, fullName: string) => {
+    const createUserProfile = async (userId: string, fullName: string, role: string = "citizen", phone: string | null = null) => {
       try {
         const response = await fetch("/api/auth/create-profile", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId, fullName })
+          body: JSON.stringify({ userId, fullName, role, phone })
         });
 
         const result = await response.json();

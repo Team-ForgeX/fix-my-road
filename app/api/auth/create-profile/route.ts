@@ -5,7 +5,7 @@ import { createCitizenProfile } from "../../../../lib/supabaseService";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { userId, fullName } = body;
+    const { userId, fullName, role, phone } = body;
 
     if (!userId || !fullName) {
       return NextResponse.json(
@@ -42,12 +42,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: "Profile already exists." });
     }
 
-    // Create the citizen profile
+    const normalizedRole = role === "admin" || role === "officer" ? role : "citizen";
+
+    // Create the profile with the appropriate role
     const profileResult = await createCitizenProfile({
       id: userId,
       full_name: fullName.trim(),
-      phone: null,
-      avatar_url: `https://avatars.dicebear.com/api/identicon/${encodeURIComponent(fullName.trim())}.svg`
+      phone: phone || null,
+      avatar_url: `https://avatars.dicebear.com/api/identicon/${encodeURIComponent(fullName.trim())}.svg`,
+      role: normalizedRole
     });
 
     if (profileResult.error || !profileResult.data) {

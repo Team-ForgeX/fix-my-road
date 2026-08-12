@@ -61,6 +61,7 @@ export async function createCitizenProfile(profile: {
   full_name: string;
   phone?: string | null;
   avatar_url?: string | null;
+  role?: "citizen" | "admin" | "officer";
 }) {
   return supabase
     .from("profiles")
@@ -69,7 +70,7 @@ export async function createCitizenProfile(profile: {
       full_name: profile.full_name,
       phone: profile.phone || null,
       avatar_url: profile.avatar_url || null,
-      role: "citizen",
+      role: profile.role || "citizen",
       identity_verified: false
     })
     .select("id, full_name, role, avatar_url, phone, identity_verified")

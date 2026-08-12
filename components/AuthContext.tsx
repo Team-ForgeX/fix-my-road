@@ -48,6 +48,8 @@ type AuthContextValue = {
     email: string;
     phone: string;
     password: string;
+    isAdmin?: boolean;
+    adminCode?: string;
   }) => Promise<{ success: boolean; error?: string; needsEmailVerification?: boolean; message?: string }>;
   verifyIdentity: (otp: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -289,13 +291,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return elevateUserToAdmin(user.id, user.email, adminCode);
   };
 
-  const signup = async ({ full_name, email, phone, password }: { full_name: string; email: string; phone: string; password: string }) => {
+  const signup = async ({
+    full_name,
+    email,
+    phone,
+    password,
+    isAdmin = false,
+    adminCode = ""
+  }: {
+    full_name: string;
+    email: string;
+    phone: string;
+    password: string;
+    isAdmin?: boolean;
+    adminCode?: string;
+  }) => {
     const normalizedEmail = email.trim().toLowerCase();
+
+    if (isAdmin) {
+      if (!adminCode.trim()) {
+        return { success: false, error: "Admin access code is required to create an admin account." };
+      }
+
+      const response = await fetch("/api/admin/elevate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: adminCode.trim() })
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        return { success: false, error: data.error ?? "Invalid admin access code." };
+      }
+    }
+
     const signUpResult = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
       options: {
-        emailRedirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/verify`
+        emailRedirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/verify`,
+        data: {
+          full_name: full_name.trim(),
+          role: isAdmin ? "admin" : "citizen",
+          phone: phone.trim() || null
+        }
       }
     });
 
@@ -303,25 +342,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: signUpResult.error?.message ?? "Unable to create account." };
     }
 
-    // Check if email confirmation is required (depends on Supabase settings)
-    // If email_confirmed_at is null, user needs to confirm email
     if (!signUpResult.data.user.email_confirmed_at) {
-      // User needs to verify email - don't create profile yet
-      // They will be sent a confirmation email automatically
       setUser(null);
-      return { 
-        success: true, 
+      return {
+        success: true,
         needsEmailVerification: true,
         message: "Account created! Please verify your email to complete signup. Check your inbox for verification link."
       };
     }
 
-    // If email is already confirmed (unlikely in normal flow), create profile
     const profileResult = await createCitizenProfile({
       id: signUpResult.data.user.id,
       full_name: full_name.trim(),
       phone: phone.trim() || null,
-      avatar_url: `https://avatars.dicebear.com/api/identicon/${encodeURIComponent(full_name.trim())}.svg`
+      avatar_url: `https://avatars.dicebear.com/api/identicon/${encodeURIComponent(full_name.trim())}.svg`,
+      role: isAdmin ? "admin" : "citizen"
     });
 
     if (profileResult.error || !profileResult.data) {
