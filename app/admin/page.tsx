@@ -9,7 +9,7 @@ import { Input } from "../../components/ui/Input";
 import type { Report } from "../../types/report";
 
 export default function AdminPage() {
-  const { adminMode, adminLogin, adminLogout, reports, updateReportStatus, ready } = useAuth();
+  const { user, adminMode, adminLogin, adminLogout, reports, updateReportStatus, ready } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -17,9 +17,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!ready) return;
-    if (!adminMode) return;
-    router.replace("/admin");
-  }, [ready, adminMode, router]);
+    if (!user) return;
+    if (!adminMode) {
+      router.replace("/dashboard");
+    }
+  }, [ready, adminMode, router, user]);
 
   const recentReports = useMemo(() => reports.slice(0, 4), [reports]);
   const stats = useMemo(() => {

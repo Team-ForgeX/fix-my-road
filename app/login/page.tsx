@@ -18,9 +18,19 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!ready) return;
-    if (user) {
-      router.replace(user.verified ? "/dashboard" : "/verify");
+    if (!user) return;
+
+    if (!user.verified) {
+      router.replace("/verify");
+      return;
     }
+
+    if (user.role === "admin") {
+      router.replace("/admin");
+      return;
+    }
+
+    router.replace("/dashboard");
   }, [ready, router, user]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -35,6 +45,12 @@ export default function LoginPage() {
       router.push("/verify");
       return;
     }
+
+    if (result.user?.role === "admin") {
+      router.push("/admin");
+      return;
+    }
+
     router.push("/dashboard");
   };
 

@@ -1,13 +1,8 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "./supabaseClient";
 import type { Report, ReportStatus } from "../types/report";
+import type { UserProfile } from "../types/user";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-export const supabase = createClient(
-  supabaseUrl || "https://placeholder.supabase.co",
-  supabaseAnonKey || "placeholder-key"
-);
+export { supabase };
 
 export type SaveReportPayload = {
   userId: string;
@@ -31,16 +26,71 @@ export type AdminActionPayload = {
   note?: string;
 };
 
+type SupabaseFallbackResult = {
+  success: false;
+  error: string;
+  isFallback?: true;
+};
+
+type SubmitReportSuccess = {
+  success: true;
+  reportId: string;
+  incidentId: string | null;
+  message: string;
+  isFallback?: true;
+};
+
+type AdminActionSuccess = {
+  success: true;
+  isFallback?: true;
+};
+
+export type SubmitReportResult = SubmitReportSuccess | SupabaseFallbackResult | { success: false; error: string; isFallback?: true };
+export type ExecuteAdminActionResult = AdminActionSuccess | SupabaseFallbackResult | { success: false; error: string; isFallback?: true };
+
+export async function fetchUserProfile(userId: string) {
+  return supabase
+    .from("profiles")
+    .select("id, full_name, role, avatar_url, phone, identity_verified")
+    .eq("id", userId)
+    .single<UserProfile>();
+}
+
+export async function createCitizenProfile(profile: {
+  id: string;
+  full_name: string;
+  phone?: string | null;
+  avatar_url?: string | null;
+}) {
+  return supabase
+    .from("profiles")
+    .insert({
+      id: profile.id,
+      full_name: profile.full_name,
+      phone: profile.phone || null,
+      avatar_url: profile.avatar_url || null,
+      role: "citizen",
+      identity_verified: false
+    })
+    .select("id, full_name, role, avatar_url, phone, identity_verified")
+    .single();
+}
+
+export async function updateIdentityVerification(userId: string) {
+  return supabase
+    .from("profiles")
+    .update({ identity_verified: true, updated_at: new Date().toISOString() })
+    .eq("id", userId)
+    .select("id, full_name, role, avatar_url, phone, identity_verified")
+    .single();
+}
+
 /**
  * Submits a new citizen report into Supabase.
  * Uploads media files to 'report-media' bucket and calls process_report_deduplication RPC.
  */
-export async function submitReportToSupabase(payload: SaveReportPayload) {
+export async function submitReportToSupabase(payload: SaveReportPayload): Promise<SubmitReportResult> {
   try {
-    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes("placeholder")) {
-      return { success: false, isFallback: true, error: "Supabase credentials not configured." };
-    }
-
     // 1. Insert into reports table
     const { data: report, error: reportError } = await supabase
       .from("reports")
@@ -117,12 +167,8 @@ export async function submitReportToSupabase(payload: SaveReportPayload) {
 /**
  * Process admin state update on an incident in Supabase.
  */
-export async function executeAdminAction(payload: AdminActionPayload) {
+export async function executeAdminAction(payload: AdminActionPayload): Promise<ExecuteAdminActionResult> {
   try {
-    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes("placeholder")) {
-      return { success: false, isFallback: true };
-    }
-
     // 1. Fetch existing incident state
     const { data: currentIncident, error: fetchErr } = await supabase
       .from("incidents")

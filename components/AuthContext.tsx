@@ -2,15 +2,20 @@
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { currentUser as defaultCurrentUser, reports as seedReports } from "../lib/mockData";
-import { submitReportToSupabase, executeAdminAction } from "../lib/supabaseService";
+import { reports as seedReports } from "../lib/mockData";
+import {
+  submitReportToSupabase,
+  executeAdminAction,
+  fetchUserProfile,
+  createCitizenProfile,
+  updateIdentityVerification
+} from "../lib/supabaseService";
+import { supabase } from "../lib/supabaseClient";
 import type { MediaType, Report } from "../types/report";
 import type { UserProfile } from "../types/user";
 
-type StoredUser = UserProfile & {
+type AuthUser = UserProfile & {
   email: string;
-  phone: string;
-  password: string;
   verified: boolean;
 };
 
@@ -23,10 +28,10 @@ type LocationPayload = {
 };
 
 type AuthContextValue = {
-  user: StoredUser | null;
+  user: AuthUser | null;
   adminMode: boolean;
   ready: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; needsVerification?: boolean; user?: AuthUser }>;
   signup: (payload: {
     full_name: string;
     email: string;
@@ -34,9 +39,9 @@ type AuthContextValue = {
     password: string;
   }) => Promise<{ success: boolean; error?: string }>;
   verifyIdentity: (otp: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
   adminLogin: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  adminLogout: () => void;
+  adminLogout: () => Promise<void>;
   reports: Report[];
   saveReport: (payload: {
     title: string;
@@ -49,41 +54,8 @@ type AuthContextValue = {
   notifications: string[];
 };
 
-const ADMIN_EMAIL = "admin@fixmyroad.local";
-const ADMIN_PASSWORD = "admin123";
 const STORAGE_KEYS = {
-  USERS: "fixmyroad_users",
-  CURRENT_USER: "fixmyroad_current_user",
-  ADMIN_SESSION: "fixmyroad_admin_session",
   REPORTS: "fixmyroad_reports"
-};
-
-const defaultCitizen: StoredUser = {
-  id: defaultCurrentUser.id,
-  full_name: defaultCurrentUser.full_name,
-  role: defaultCurrentUser.role,
-  avatar_url: defaultCurrentUser.avatar_url,
-  email: "aisha.verma@example.com",
-  phone: "9876543210",
-  password: "password123",
-  verified: true
-};
-
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-const readJson = <T,>(key: string, fallback: T): T => {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-};
-
-const writeJson = <T,>(key: string, value: T) => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(key, JSON.stringify(value));
 };
 
 const pickSeverity = (text: string) => {
@@ -126,47 +98,107 @@ const createMediaItems = async (files: File[], reportId: string) => {
   return results;
 };
 
+const readJson = <T,>(key: string, fallback: T): T => {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeJson = <T,>(key: string, value: T) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(key, JSON.stringify(value));
+};
+
 const initialReports = (): Report[] => {
   const persisted = readJson<Report[]>(STORAGE_KEYS.REPORTS, []);
   return persisted.length > 0 ? persisted : seedReports;
 };
 
-const initialUsers = (): StoredUser[] => {
-  const persisted = readJson<StoredUser[]>(STORAGE_KEYS.USERS, []);
-  return persisted.length > 0 ? persisted : [defaultCitizen];
-};
+const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+
+function buildAuthUser(profile: UserProfile, email: string): AuthUser {
+  return {
+    ...profile,
+    email,
+    verified: Boolean(profile.identity_verified)
+  };
+}
+
+async function loadProfile(userId: string, email: string) {
+  const profileResult = await fetchUserProfile(userId);
+  if (profileResult.error || !profileResult.data) {
+    return { success: false, error: profileResult.error?.message ?? "Profile not found." };
+  }
+  return { success: true, user: buildAuthUser(profileResult.data, email) };
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<StoredUser | null>(null);
-  const [adminMode, setAdminMode] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
-  const [users, setUsers] = useState<StoredUser[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    const loadedUsers = initialUsers();
-    setUsers(loadedUsers);
+    let mounted = true;
+
+    const syncSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (!mounted) return;
+      if (error) {
+        console.warn("Supabase session error:", error.message);
+        setUser(null);
+        setReady(true);
+        return;
+      }
+
+      const sessionUser = data?.session?.user;
+      if (!sessionUser?.id) {
+        setUser(null);
+        setReady(true);
+        return;
+      }
+
+      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "");
+      if (!mounted) return;
+      if (!profileResult.success || !profileResult.user) {
+        console.warn(profileResult.error);
+        setUser(null);
+      } else {
+        setUser(profileResult.user);
+      }
+      setReady(true);
+    };
+
+    syncSession();
     setReports(initialReports());
 
-    const storedUserId = window.localStorage.getItem(STORAGE_KEYS.CURRENT_USER);
-    if (storedUserId) {
-      const match = loadedUsers.find((entry) => entry.id === storedUserId);
-      if (match) {
-        setUser(match);
-      } else {
-        window.localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
+    const subscription = supabase.auth.onAuthStateChange(async (_, session) => {
+      if (!mounted) return;
+      const sessionUser = session?.user;
+      if (!sessionUser?.id) {
+        setUser(null);
+        setReady(true);
+        return;
       }
-    }
+      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "");
+      if (!mounted) return;
+      if (!profileResult.success || !profileResult.user) {
+        console.warn(profileResult.error);
+        setUser(null);
+      } else {
+        setUser(profileResult.user);
+      }
+      setReady(true);
+    });
 
-    const storedAdmin = window.localStorage.getItem(STORAGE_KEYS.ADMIN_SESSION) === "true";
-    setAdminMode(storedAdmin);
-    setReady(true);
+    return () => {
+      mounted = false;
+      subscription.data.subscription.unsubscribe();
+    };
   }, []);
-
-  const saveUsers = (nextUsers: StoredUser[]) => {
-    setUsers(nextUsers);
-    writeJson(STORAGE_KEYS.USERS, nextUsers);
-  };
 
   const saveReports = (nextReports: Report[]) => {
     setReports(nextReports);
@@ -174,38 +206,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
-    const normalized = email.trim().toLowerCase();
-    const found = users.find((entry) => entry.email.toLowerCase() === normalized && entry.password === password);
-    if (!found) {
-      return { success: false, error: "No account matched that email and password." };
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password
+    });
+
+    if (result.error || !result.data?.user) {
+      return { success: false, error: result.error?.message ?? "Unable to sign in." };
     }
-    setUser(found);
-    window.localStorage.setItem(STORAGE_KEYS.CURRENT_USER, found.id);
-    if (!found.verified) {
-      return { success: true, needsVerification: true };
+
+    const profileResult = await loadProfile(result.data.user.id, result.data.user.email ?? normalizedEmail);
+    if (!profileResult.success || !profileResult.user) {
+      await supabase.auth.signOut();
+      return { success: false, error: profileResult.error ?? "Profile not found." };
     }
-    return { success: true };
+
+    setUser(profileResult.user);
+    return {
+      success: true,
+      needsVerification: !profileResult.user.verified,
+      user: profileResult.user
+    };
   };
 
   const signup = async ({ full_name, email, phone, password }: { full_name: string; email: string; phone: string; password: string }) => {
-    const normalized = email.trim().toLowerCase();
-    if (users.some((entry) => entry.email.toLowerCase() === normalized)) {
-      return { success: false, error: "An account already exists with this email." };
+    const normalizedEmail = email.trim().toLowerCase();
+    const signUpResult = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password
+    });
+
+    if (signUpResult.error || !signUpResult.data?.user) {
+      return { success: false, error: signUpResult.error?.message ?? "Unable to create account." };
     }
-    const newUser: StoredUser = {
-      id: `u${Date.now()}`,
+
+    const profileResult = await createCitizenProfile({
+      id: signUpResult.data.user.id,
       full_name: full_name.trim(),
-      role: "citizen",
-      avatar_url: `https://avatars.dicebear.com/api/identicon/${encodeURIComponent(full_name.trim())}.svg`,
-      email: normalized,
-      phone: phone.trim(),
-      password,
-      verified: false
-    };
-    const nextUsers = [...users, newUser];
-    saveUsers(nextUsers);
-    setUser(newUser);
-    window.localStorage.setItem(STORAGE_KEYS.CURRENT_USER, newUser.id);
+      phone: phone.trim() || null,
+      avatar_url: `https://avatars.dicebear.com/api/identicon/${encodeURIComponent(full_name.trim())}.svg`
+    });
+
+    if (profileResult.error || !profileResult.data) {
+      await supabase.auth.signOut();
+      return { success: false, error: profileResult.error?.message ?? "Unable to create profile." };
+    }
+
+    setUser(buildAuthUser(profileResult.data, normalizedEmail));
     return { success: true };
   };
 
@@ -216,30 +264,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (otp.trim() !== "123456") {
       return { success: false, error: "The verification code is invalid. Use 123456 for the mock flow." };
     }
-    const nextUsers = users.map((entry) => (entry.id === user.id ? { ...entry, verified: true } : entry));
-    saveUsers(nextUsers);
-    const verifiedUser = nextUsers.find((entry) => entry.id === user.id) ?? user;
-    setUser(verifiedUser);
+
+    const result = await updateIdentityVerification(user.id);
+    if (result.error || !result.data) {
+      return { success: false, error: result.error?.message ?? "Unable to verify identity." };
+    }
+
+    setUser(buildAuthUser(result.data, user.email));
     return { success: true };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    window.localStorage.removeItem(STORAGE_KEYS.CURRENT_USER);
   };
 
   const adminLogin = async (email: string, password: string) => {
-    if (email.trim().toLowerCase() !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-      return { success: false, error: "Invalid admin credentials." };
+    const result = await login(email, password);
+    if (!result.success) {
+      return result;
     }
-    window.localStorage.setItem(STORAGE_KEYS.ADMIN_SESSION, "true");
-    setAdminMode(true);
+    if (!result.user || result.user.role !== "admin") {
+      await logout();
+      return { success: false, error: "Admin access required." };
+    }
     return { success: true };
   };
 
-  const adminLogout = () => {
-    window.localStorage.removeItem(STORAGE_KEYS.ADMIN_SESSION);
-    setAdminMode(false);
+  const adminLogout = async () => {
+    await logout();
   };
 
   const saveReport = async ({ title, description, mediaFiles, location }: { title: string; description: string; mediaFiles: File[]; location: LocationPayload }) => {
@@ -250,7 +303,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Complete identity verification before submitting reports." };
     }
 
-    // Attempt Supabase backend insertion
     submitReportToSupabase({
       userId: user.id,
       title,
@@ -305,6 +357,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     saveReports(nextReports);
   };
+
+  const adminMode = useMemo(() => user?.role === "admin", [user]);
 
   const notifications = useMemo(() => {
     if (adminMode) {
