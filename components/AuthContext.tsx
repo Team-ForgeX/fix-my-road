@@ -329,7 +329,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: normalizedEmail,
       password,
       options: {
-        emailRedirectTo: `${typeof window !== "undefined" ? window.location.origin : ""}/verify`,
+        emailRedirectTo: process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/verify` : undefined,
         data: {
           full_name: full_name.trim(),
           role: isAdmin ? "admin" : "citizen",
