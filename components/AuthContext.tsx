@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { currentUser as defaultCurrentUser, reports as seedReports } from "../lib/mockData";
+import { submitReportToSupabase, executeAdminAction } from "../lib/supabaseService";
 import type { MediaType, Report } from "../types/report";
 import type { UserProfile } from "../types/user";
 
@@ -249,6 +250,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Complete identity verification before submitting reports." };
     }
 
+    // Attempt Supabase backend insertion
+    submitReportToSupabase({
+      userId: user.id,
+      title,
+      description: description.trim(),
+      latitude: 28.6139 + Math.random() * 0.01,
+      longitude: 77.2090 + Math.random() * 0.01,
+      address: location.address,
+      landmark: location.landmark,
+      city: location.city,
+      pincode: location.pincode,
+      mediaFiles
+    }).catch((err) => console.warn("Supabase background save fallback:", err));
+
     const id = `R${Date.now()}`;
     const thumbnailEntries = await createMediaItems(mediaFiles, id);
     const report: Report = {
@@ -277,6 +292,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const updateReportStatus = (reportId: string, status: Report["status"]) => {
+    executeAdminAction({
+      incidentId: reportId,
+      adminId: user?.id || "admin-1",
+      newStatus: status
+    }).catch((err) => console.warn("Supabase admin action fallback:", err));
+
     const nextReports = reports.map((report) => {
       if (report.id !== reportId) return report;
       const nextProcessing = status === "resolved" ? "resolved" : status === "in_progress" ? "assigned" : report.processing_state;

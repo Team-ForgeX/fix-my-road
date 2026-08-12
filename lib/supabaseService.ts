@@ -1,0 +1,187 @@
+import { createClient } from "@supabase/supabase-js";
+import type { Report, ReportStatus } from "../types/report";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+export const supabase = createClient(
+  supabaseUrl || "https://placeholder.supabase.co",
+  supabaseAnonKey || "placeholder-key"
+);
+
+export type SaveReportPayload = {
+  userId: string;
+  title?: string;
+  description: string;
+  latitude: number;
+  longitude: number;
+  address: string;
+  landmark?: string;
+  city?: string;
+  pincode?: string;
+  mediaFiles?: File[];
+};
+
+export type AdminActionPayload = {
+  incidentId: string;
+  adminId: string;
+  newStatus: ReportStatus | "rejected";
+  departmentId?: string;
+  officerId?: string;
+  note?: string;
+};
+
+/**
+ * Submits a new citizen report into Supabase.
+ * Uploads media files to 'report-media' bucket and calls process_report_deduplication RPC.
+ */
+export async function submitReportToSupabase(payload: SaveReportPayload) {
+  try {
+    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes("placeholder")) {
+      return { success: false, isFallback: true, error: "Supabase credentials not configured." };
+    }
+
+    // 1. Insert into reports table
+    const { data: report, error: reportError } = await supabase
+      .from("reports")
+      .insert({
+        user_id: payload.userId,
+        description: payload.description,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+        address: payload.address,
+        landmark: payload.landmark || null,
+        city: payload.city || null,
+        pincode: payload.pincode || null,
+        source_type: "web",
+        processing_state: "pending"
+      })
+      .select()
+      .single();
+
+    if (reportError || !report) {
+      throw new Error(reportError?.message || "Failed to create report record.");
+    }
+
+    // 2. Upload media files if provided
+    if (payload.mediaFiles && payload.mediaFiles.length > 0) {
+      for (const file of payload.mediaFiles) {
+        const fileExt = file.name.split(".").pop();
+        const filePath = `${report.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const mediaType = file.type.startsWith("video") ? "video" : "image";
+
+        const { error: uploadError } = await supabase.storage
+          .from("report-media")
+          .upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+        if (!uploadError) {
+          const { data: publicUrlData } = supabase.storage
+            .from("report-media")
+            .getPublicUrl(filePath);
+
+          await supabase.from("report_media").insert({
+            report_id: report.id,
+            media_type: mediaType,
+            storage_bucket: "report-media",
+            storage_path: publicUrlData?.publicUrl || filePath,
+            mime_type: file.type,
+            file_size: file.size
+          });
+        }
+      }
+    }
+
+    // 3. Trigger smart deduplication PL/pgSQL function
+    let incidentId: string | null = null;
+    const { data: dedupeResult, error: dedupeErr } = await supabase.rpc(
+      "process_report_deduplication",
+      { p_report_id: report.id, p_radius_meters: 100.0 }
+    );
+
+    if (!dedupeErr && dedupeResult) {
+      incidentId = dedupeResult;
+    }
+
+    return {
+      success: true,
+      reportId: report.id,
+      incidentId,
+      message: "Report submitted and processed successfully."
+    };
+  } catch (err: any) {
+    console.warn("Supabase report submission error, falling back:", err?.message);
+    return { success: false, error: err?.message || "Error communicating with Supabase." };
+  }
+}
+
+/**
+ * Process admin state update on an incident in Supabase.
+ */
+export async function executeAdminAction(payload: AdminActionPayload) {
+  try {
+    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes("placeholder")) {
+      return { success: false, isFallback: true };
+    }
+
+    // 1. Fetch existing incident state
+    const { data: currentIncident, error: fetchErr } = await supabase
+      .from("incidents")
+      .select("status")
+      .eq("id", payload.incidentId)
+      .single();
+
+    if (fetchErr || !currentIncident) {
+      throw new Error(fetchErr?.message || "Incident not found");
+    }
+
+    // 2. Update status
+    const { error: updateErr } = await supabase
+      .from("incidents")
+      .update({ status: payload.newStatus, updated_at: new Date().toISOString() })
+      .eq("id", payload.incidentId);
+
+    if (updateErr) throw updateErr;
+
+    // 3. Insert assignment if department provided
+    if (payload.departmentId) {
+      await supabase.from("incident_assignments").insert({
+        incident_id: payload.incidentId,
+        department_id: payload.departmentId,
+        officer_id: payload.officerId || null,
+        assigned_by: payload.adminId,
+        status: payload.newStatus
+      });
+    }
+
+    // 4. Log status history audit
+    await supabase.from("incident_status_history").insert({
+      incident_id: payload.incidentId,
+      old_status: currentIncident.status,
+      new_status: payload.newStatus,
+      changed_by: payload.adminId,
+      note: payload.note || `Status changed from ${currentIncident.status} to ${payload.newStatus}`
+    });
+
+    // 5. Create user notifications for citizens who reported this incident
+    const { data: linkedReports } = await supabase
+      .from("reports")
+      .select("user_id, id")
+      .eq("incident_id", payload.incidentId);
+
+    if (linkedReports && linkedReports.length > 0) {
+      const notifs = linkedReports.map((r) => ({
+        user_id: r.user_id,
+        report_id: r.id,
+        incident_id: payload.incidentId,
+        title: `Issue Status Updated`,
+        message: `Your reported issue status has been updated to "${payload.newStatus.replace("_", " ")}".`
+      }));
+      await supabase.from("notifications").insert(notifs);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.warn("Supabase admin action error:", err?.message);
+    return { success: false, error: err?.message };
+  }
+}
