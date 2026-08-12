@@ -4,4 +4,8 @@
     <loc>https://fix-my-roads.netlify.app/</loc>
     <priority>1.00</priority>
   </url>
+  <url>
+    <loc>https://fix-my-roads.netlify.app/nearby</loc>
+    <priority>0.70</priority>
+  </url>
 </urlset>

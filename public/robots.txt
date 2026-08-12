@@ -9,6 +9,5 @@ Disallow: /verify
 Disallow: /forgot-password
 Disallow: /report
 Disallow: /reports
-Disallow: /nearby
 Disallow: /notifications
 Sitemap: https://fix-my-roads.netlify.app/sitemap.xml

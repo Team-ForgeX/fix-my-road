@@ -5,33 +5,33 @@ import { Footer } from "../components/Footer";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://fix-my-roads.netlify.app"),
-  title: "fix-my-roads | Citizen issue reporting platform",
+  title: "fix-my-roads | Fix road issues, report potholes, and improve local road repair",
   description:
-    "fix-my-roads helps citizens report local infrastructure problems like potholes, garbage, streetlight outages, and water leaks. Track issue resolution and improve public accountability.",
+    "fix-my-roads helps citizens report road issues like potholes, garbage, streetlight outages, and water leaks. Learn how to fix road problems in your area, submit local issue reports, and track resolution progress.",
   keywords: [
-    "civic issue reporting",
+    "fix road",
+    "road issues",
+    "how to fix road",
     "pothole reporting",
+    "road repair",
+    "infrastructure issue reporting",
     "streetlight outage",
-    "garbage collection problems",
     "water leak reporting",
-    "public infrastructure maintenance",
-    "local government accountability",
-    "community issue tracker",
-    "citizen reporting platform"
+    "local road maintenance"
   ],
   applicationName: "fix-my-roads",
   openGraph: {
-    title: "fix-my-roads | Report local infrastructure issues",
+    title: "fix-my-roads | Fix road issues and report local infrastructure problems",
     description:
-      "fix-my-roads helps citizens report potholes, garbage, water leaks and other public infrastructure problems, then track resolution progress.",
+      "Use fix-my-roads to report road issues, potholes, streetlight outages, and water leaks in your neighborhood. Track fixes and make local road repair more visible.",
     type: "website",
     siteName: "fix-my-roads"
   },
   twitter: {
     card: "summary_large_image",
-    title: "fix-my-roads | Report local infrastructure issues",
+    title: "fix-my-roads | Fix road issues and report local problems",
     description:
-      "Submit and track community reports for potholes, streetlight failures, garbage, and other municipal issues.",
+      "Report road issues, potholes, and damaged infrastructure with fix-my-roads, and follow the progress of local repairs.",
     creator: "@fix-my-roads"
   },
   robots: {

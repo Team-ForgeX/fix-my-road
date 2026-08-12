@@ -30,10 +30,10 @@ export default function HomePage() {
             </div>
             <div className="space-y-4">
               <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Report issues in your neighborhood, verify impact, and help resolve public infrastructure problems faster.
+                Report road issues in your neighborhood, verify impact, and help resolve local infrastructure problems faster.
               </h1>
               <p className="max-w-2xl text-lg text-slate-400">
-                Fix My Road helps citizens submit real-world reports for garbage, potholes, water leaks, and streetlight outages. The platform makes local infrastructure issue reporting simple, while tracking issue status and incident resolution.
+                Fix My Road helps citizens submit real-world reports for potholes, damaged streets, water leaks, and streetlight outages. The platform makes fixing road problems simple, while tracking issue status and repair progress.
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
