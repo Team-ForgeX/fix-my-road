@@ -38,8 +38,9 @@ export async function POST(request: Request) {
 
     const adminDb = createAdminClient();
 
-    // Fetch profile from public.profiles
-    const { data: profile, error: profileError } = await supabase
+    // Fetch profile from public.profiles using the admin client so the post-sign-in
+    // lookup is not blocked by RLS/session propagation timing.
+    const { data: profile, error: profileError } = await adminDb
       .from("profiles")
       .select("id, full_name, phone, role, created_at, updated_at")
       .eq("id", authData.user.id)

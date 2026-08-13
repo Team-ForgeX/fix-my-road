@@ -1,9 +1,8 @@
-export type UserRole = "client" | "citizen" | "admin";
+export type UserRole = "client" | "admin";
 
 export type UserProfile = {
   id: string;
   full_name: string;
-  phone?: string | null;
   phone?: string | null;
   role: UserRole;
   created_at?: string;

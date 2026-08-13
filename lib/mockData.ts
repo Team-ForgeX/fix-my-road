@@ -6,7 +6,7 @@ export const currentUser: UserProfile = {
   id: "u100",
   full_name: "Aisha Verma",
   role: "client",
-  avatar_url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&q=80"
+  avatar_url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&q=120&q=80"
 };
 
 export const reportMedia: ReportMedia[] = [

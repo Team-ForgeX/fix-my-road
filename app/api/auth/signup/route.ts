@@ -35,6 +35,8 @@ export async function POST(request: Request) {
     const supabase = createClient();
     const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
 
+    const normalizedRole = requestedRole === "admin" ? "admin" : "client";
+
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -43,7 +45,8 @@ export async function POST(request: Request) {
         data: {
           full_name: fullName,
           phone: phone || null,
-          requested_role: requestedRole === "admin" ? "admin" : "client"
+          requested_role: normalizedRole,
+          role: normalizedRole
         }
       }
     });

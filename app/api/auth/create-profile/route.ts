@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { createAdminClient } from "../../../../lib/supabase/admin";
+import { createCitizenProfile } from "../../../../lib/supabaseService";
 
 export async function POST(request: Request) {
   try {
@@ -12,8 +14,10 @@ export async function POST(request: Request) {
       );
     }
 
+    const adminDb = createAdminClient();
+
     // Verify the user exists and email is confirmed
-    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+    const { data: userData, error: userError } = await adminDb.auth.admin.getUserById(userId);
 
     if (userError || !userData?.user) {
       return NextResponse.json(
@@ -30,11 +34,11 @@ export async function POST(request: Request) {
     }
 
     // Check if profile already exists
-    const { data: existingProfile } = await supabase
+    const { data: existingProfile } = await adminDb
       .from("profiles")
       .select("id")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
 
     if (existingProfile) {
       return NextResponse.json({ success: true, message: "Profile already exists." });

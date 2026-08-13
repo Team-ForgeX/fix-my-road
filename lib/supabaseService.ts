@@ -60,18 +60,20 @@ export async function createCitizenProfile(profile: {
   id: string;
   full_name: string;
   phone?: string | null;
-  role?: "client" | "citizen" | "admin";
+  role?: "client" | "admin";
 }) {
   return supabase
     .from("profiles")
-    .insert({
-      id: profile.id,
-      full_name: profile.full_name,
-      phone: profile.phone || null,
-      role: profile.role || "client"
-      role: profile.role || "client"
-    })
-    .select("id, full_name, role, phone, created_at, updated_at")
+    .upsert(
+      {
+        id: profile.id,
+        full_name: profile.full_name,
+        phone: profile.phone || null,
+        role: profile.role || "client",
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: "id" }
+    )
     .select("id, full_name, role, phone, created_at, updated_at")
     .single();
 }
