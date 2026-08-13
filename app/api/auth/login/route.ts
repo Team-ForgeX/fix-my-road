@@ -49,20 +49,26 @@ export async function POST(request: Request) {
       .eq("id", authData.user.id)
       .maybeSingle();
 
+    console.log("📊 Profile lookup result:", { profile, profileError: profileError?.message });
+
     let resolvedProfile = profile;
 
     if (profileError) {
-      console.error("Profile lookup error:", profileError.message);
+      console.error("❌ Profile lookup error:", profileError.message);
+      console.error("Full error details:", profileError);
       return NextResponse.json(
-        { success: false, error: "Unable to read account profile." },
+        { success: false, error: "Unable to read account profile: " + profileError.message },
         { status: 500 }
       );
     }
 
     if (!resolvedProfile) {
+      console.log("⚠️ No profile found, attempting to create fallback profile...");
       const emailValue = authData.user.email ?? "";
       const baseName = authData.user.user_metadata?.full_name || emailValue.split("@")[0] || "User";
       const fallbackFullName = String(baseName).trim() || "User";
+
+      console.log("📝 Creating profile with:", { id: authData.user.id, full_name: fallbackFullName });
 
       const { data: createdProfile, error: createProfileError } = await adminDb
         .from("profiles")
@@ -78,10 +84,13 @@ export async function POST(request: Request) {
         .select("id, full_name, phone, role, created_at, updated_at")
         .single();
 
+      console.log("📊 Profile creation result:", { createdProfile, createProfileError: createProfileError?.message });
+
       if (createProfileError || !createdProfile) {
-        console.error("Fallback profile creation error:", createProfileError?.message ?? "Unknown profile creation error");
+        console.error("❌ Fallback profile creation error:", createProfileError?.message ?? "Unknown profile creation error");
+        console.error("Full error details:", createProfileError);
         return NextResponse.json(
-          { success: false, error: "Unable to read account profile. Please create a profile for this user in Supabase." },
+          { success: false, error: "Profile creation failed: " + (createProfileError?.message ?? "Unknown error") },
           { status: 500 }
         );
       }
