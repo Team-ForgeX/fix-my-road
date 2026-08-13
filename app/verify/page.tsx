@@ -18,24 +18,53 @@ export default function VerifyPage() {
     setMessage("Checking your email verification status...");
 
     const { data, error } = await supabase.auth.getUser();
-    if (error) {
-      setMessage(error.message || "Unable to confirm your email verification status right now.");
+    if (error || !data?.user) {
+      setMessage(error?.message || "Please log in or sign up to verify your email address.");
       setChecking(false);
       return;
     }
 
-    const confirmed = Boolean(data?.user?.email_confirmed_at);
-    setEmail(data?.user?.email ?? null);
+    const user = data.user;
+    const confirmed = Boolean(user.email_confirmed_at);
+    setEmail(user.email ?? null);
     setIsVerified(confirmed);
 
     if (confirmed) {
-      setMessage("Your email is verified. You can continue to your account.");
+      setMessage("Your email is verified! Setting up your profile...");
+
+      // Ensure profile row exists in case SQL trigger didn't run
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!profile) {
+        const fullName = user.user_metadata?.full_name || "User";
+        const phone = user.user_metadata?.phone || null;
+        await supabase.from("profiles").insert({
+          id: user.id,
+          full_name: fullName,
+          phone: phone,
+          role: "client"
+        });
+      }
+
+      const userRole = profile?.role || "client";
+      setMessage("Your account is ready! Redirecting...");
       setChecking(false);
-      setTimeout(() => router.push("/dashboard"), 1200);
+
+      setTimeout(() => {
+        if (userRole === "admin") {
+          router.push("/admin");
+        } else {
+          router.push("/dashboard");
+        }
+      }, 1000);
       return;
     }
 
-    setMessage("Your email is not confirmed yet. Please open the verification link in your inbox.");
+    setMessage("Your email is not confirmed yet. Please open the verification link sent to your inbox.");
     setChecking(false);
   };
 
@@ -44,17 +73,21 @@ export default function VerifyPage() {
   }, []);
 
   const resendVerification = async () => {
-    const { data, error } = await supabase.auth.getUser();
-    const userEmail = data?.user?.email;
-
-    if (!userEmail) {
-      setMessage("We could not find your email. Please sign up again or contact support.");
-      return;
+    if (!email) {
+      const { data } = await supabase.auth.getUser();
+      if (!data?.user?.email) {
+        setMessage("We could not find your email. Please sign up again.");
+        return;
+      }
+      setEmail(data.user.email);
     }
+
+    const targetEmail = email;
+    if (!targetEmail) return;
 
     const { error: resendError } = await supabase.auth.resend({
       type: "signup",
-      email: userEmail
+      email: targetEmail
     });
 
     if (resendError) {
@@ -62,7 +95,7 @@ export default function VerifyPage() {
       return;
     }
 
-    setMessage("A new verification email has been sent. Please check your inbox.");
+    setMessage(`A new verification email has been sent to ${targetEmail}. Please check your inbox.`);
   };
 
   return (
@@ -79,14 +112,14 @@ export default function VerifyPage() {
           <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6">
             <p className="text-slate-300">{message}</p>
             {email ? (
-              <p className="mt-3 text-sm text-slate-400">Verification email sent to: {email}</p>
+              <p className="mt-3 text-sm text-slate-400">Account email: {email}</p>
             ) : null}
           </div>
 
           {!isVerified && (
             <div className="space-y-4">
               <Button type="button" className="w-full" onClick={checkStatus} disabled={checking}>
-                {checking ? "Checking..." : "Check again"}
+                {checking ? "Checking..." : "Check verification status"}
               </Button>
               <Button type="button" variant="secondary" className="w-full" onClick={resendVerification}>
                 Resend verification email

@@ -3,22 +3,17 @@
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. User profiles
--- IMPORTANT:
--- - id must match auth.users.id
--- - password is managed by Supabase Auth
--- - email verification is checked from auth.users.email_confirmed_at
-CREATE TABLE IF NOT EXISTS profiles (
+-- 1. Minimal User profiles table
+-- Connected directly to auth.users(id)
+CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   full_name TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
   phone TEXT,
-  role TEXT NOT NULL CHECK (role IN ('citizen', 'officer', 'admin')),
-  avatar_url TEXT,
-  identity_verified BOOLEAN DEFAULT FALSE,
+  role TEXT NOT NULL DEFAULT 'client' CHECK (role IN ('client', 'admin')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
 
 
 

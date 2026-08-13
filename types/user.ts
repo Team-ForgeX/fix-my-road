@@ -1,12 +1,10 @@
-export type UserRole = "citizen" | "officer" | "admin";
+export type UserRole = "client" | "admin";
 
 export type UserProfile = {
   id: string;
   full_name: string;
+  phone?: string | null;
   role: UserRole;
-  avatar_url?: string;
-  email?: string;
-  phone?: string;
-  verified?: boolean;
-  identity_verified?: boolean;
+  created_at?: string;
+  updated_at?: string;
 };

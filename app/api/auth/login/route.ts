@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "../../../../lib/supabaseClient";
+import { createClient } from "../../../../lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +13,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const supabase = createClient();
 
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -28,28 +30,29 @@ export async function POST(request: Request) {
 
     if (!authData.user.email_confirmed_at) {
       return NextResponse.json(
-        { success: false, error: "Email is not verified. Please confirm your email first." },
+        { success: false, error: "Email is not verified. Please confirm your email first.", needsVerification: true },
         { status: 403 }
       );
     }
 
+    // Fetch profile from public.profiles
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, full_name, email, phone, role, avatar_url, identity_verified")
+      .select("id, full_name, phone, role, created_at, updated_at")
       .eq("id", authData.user.id)
       .maybeSingle();
 
     if (profileError) {
       console.error("Profile lookup error:", profileError.message);
       return NextResponse.json(
-        { success: false, error: "Unable to read account information." },
+        { success: false, error: "Unable to read account profile." },
         { status: 500 }
       );
     }
 
     if (!profile) {
       return NextResponse.json(
-        { success: false, error: "Account profile not found. Please complete email verification and profile creation." },
+        { success: false, error: "Account profile not found. Please complete email verification first." },
         { status: 404 }
       );
     }
@@ -59,11 +62,9 @@ export async function POST(request: Request) {
       user: {
         id: profile.id,
         full_name: profile.full_name,
-        email: profile.email,
+        email: authData.user.email,
         phone: profile.phone,
-        role: profile.role,
-        avatar_url: profile.avatar_url,
-        verified: Boolean(profile.identity_verified)
+        role: profile.role
       }
     });
   } catch (error: any) {

@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
-import { supabase } from "../../../../lib/supabaseClient";
+import { createClient } from "../../../../lib/supabase/server";
+import { createAdminClient } from "../../../../lib/supabase/admin";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { userId, email, code } = body;
-
-    if (!userId || typeof userId !== "string") {
-      return NextResponse.json(
-        { success: false, error: "User session is required." },
-        { status: 400 }
-      );
-    }
+    const { code } = body;
 
     if (!code || typeof code !== "string") {
       return NextResponse.json(
@@ -24,7 +18,7 @@ export async function POST(request: Request) {
     if (!adminCode) {
       console.error("ADMIN_CODE environment variable not configured");
       return NextResponse.json(
-        { success: false, error: "Admin system not configured." },
+        { success: false, error: "Admin access system not configured." },
         { status: 500 }
       );
     }
@@ -36,40 +30,50 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
-    if (userError || !userData?.user) {
+    // Require an authenticated user session
+    const supabase = createClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
       return NextResponse.json(
-        { success: false, error: "Authenticated user not found." },
-        { status: 404 }
+        { success: false, error: "Authentication required before account elevation." },
+        { status: 401 }
       );
     }
 
-    if (email && userData.user.email && userData.user.email.toLowerCase() !== String(email).trim().toLowerCase()) {
+    if (!user.email_confirmed_at) {
       return NextResponse.json(
-        { success: false, error: "User identity mismatch." },
+        { success: false, error: "Email must be verified before elevating privileges." },
         { status: 403 }
       );
     }
 
-    const { data: profile, error: profileError } = await supabase
+    // Use admin client (service role) to bypass RLS and set role to admin
+    const adminDb = createAdminClient();
+    const { data: profile, error: profileError } = await adminDb
       .from("profiles")
       .update({ role: "admin", updated_at: new Date().toISOString() })
-      .eq("id", userId)
-      .select("id, role")
+      .eq("id", user.id)
+      .select("id, full_name, role")
       .single();
 
     if (profileError || !profile) {
+      console.error("Profile elevate error:", profileError?.message);
       return NextResponse.json(
-        { success: false, error: profileError?.message ?? "Unable to update admin role." },
+        { success: false, error: profileError?.message ?? "Unable to update account privileges." },
         { status: 500 }
       );
     }
 
-    return NextResponse.json({ success: true, message: "Admin code verified and role updated." });
+    return NextResponse.json({
+      success: true,
+      message: "Account elevated to admin successfully.",
+      user: profile
+    });
   } catch (err: any) {
     console.error("Admin code verification error:", err);
     return NextResponse.json(
-      { success: false, error: "An error occurred while verifying the admin code." },
+      { success: false, error: "An error occurred while elevating account." },
       { status: 500 }
     );
   }

@@ -7,8 +7,7 @@ import {
   submitReportToSupabase,
   executeAdminAction,
   fetchUserProfile,
-  createCitizenProfile,
-  updateIdentityVerification
+  createCitizenProfile
 } from "../lib/supabaseService";
 import { supabase } from "../lib/supabaseClient";
 import type { MediaType, Report } from "../types/report";
@@ -142,21 +141,22 @@ const initialNotifications = (): AppNotification[] => {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-function buildAuthUser(profile: UserProfile, email: string): AuthUser {
+function buildAuthUser(profile: UserProfile, email: string, emailConfirmed: boolean): AuthUser {
   return {
     ...profile,
     email,
-    verified: Boolean(profile.identity_verified)
+    verified: emailConfirmed
   };
 }
 
-async function loadProfile(userId: string, email: string) {
+async function loadProfile(userId: string, email: string, emailConfirmed: boolean) {
   const profileResult = await fetchUserProfile(userId);
   if (profileResult.error || !profileResult.data) {
     return { success: false, error: profileResult.error?.message ?? "Profile not found." };
   }
-  return { success: true, user: buildAuthUser(profileResult.data, email) };
+  return { success: true, user: buildAuthUser(profileResult.data, email, emailConfirmed) };
 }
+
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -184,7 +184,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "");
+      const isConfirmed = Boolean(sessionUser.email_confirmed_at);
+      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "", isConfirmed);
       if (!mounted) return;
       if (!profileResult.success || !profileResult.user) {
         console.warn(profileResult.error);
@@ -207,7 +208,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setReady(true);
         return;
       }
-      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "");
+      const isConfirmed = Boolean(sessionUser.email_confirmed_at);
+      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "", isConfirmed);
+
       if (!mounted) return;
       if (!profileResult.success || !profileResult.user) {
         console.warn(profileResult.error);
@@ -258,7 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   };
 
-  const elevateUserToAdmin = async (userId: string, email: string, adminCode: string) => {
+  const elevateUserToAdmin = async (adminCode: string) => {
     if (!adminCode.trim()) {
       return { success: false, error: "Admin access code is required." };
     }
@@ -266,7 +269,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await fetch("/api/admin/elevate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, email, code: adminCode.trim() })
+      body: JSON.stringify({ code: adminCode.trim() })
     });
 
     const data = await response.json();
@@ -274,20 +277,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: data.error ?? "Unable to verify admin code." };
     }
 
-    const refreshed = await loadProfile(userId, email);
-    if (!refreshed.success || !refreshed.user) {
-      return { success: false, error: refreshed.error ?? "Unable to refresh profile." };
+    const { data: { user: sessionUser } } = await supabase.auth.getUser();
+    if (sessionUser) {
+      const refreshed = await loadProfile(sessionUser.id, sessionUser.email ?? "", Boolean(sessionUser.email_confirmed_at));
+      if (refreshed.success && refreshed.user) {
+        setUser(refreshed.user);
+      }
     }
 
-    setUser(refreshed.user);
     return { success: true };
   };
 
   const elevateToAdmin = async (adminCode: string) => {
-    if (!user) {
-      return { success: false, error: "You must be signed in to elevate account privileges." };
-    }
-    return elevateUserToAdmin(user.id, user.email, adminCode);
+    return elevateUserToAdmin(adminCode);
   };
 
   const signup = async ({
@@ -307,23 +309,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }) => {
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (isAdmin) {
-      if (!adminCode.trim()) {
-        return { success: false, error: "Admin access code is required to create an admin account." };
-      }
-
-      const response = await fetch("/api/admin/elevate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: adminCode.trim() })
-      });
-
-      const data = await response.json();
-      if (!response.ok || !data.success) {
-        return { success: false, error: data.error ?? "Invalid admin access code." };
-      }
-    }
-
     const signupResponse = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -332,7 +317,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: normalizedEmail,
         phone: phone.trim(),
         password,
-        role: isAdmin ? "admin" : "citizen"
+        role: isAdmin ? "admin" : "client"
       })
     });
 
@@ -348,6 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       message: signupData.message ?? "Please verify your email to complete signup."
     };
   };
+
 
   // Legacy mock identity verification is intentionally disabled.
   // Email verification is the only required verification step before inserting user data.
