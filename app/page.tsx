@@ -1,7 +1,33 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, MapPin, ShieldCheck, Sparkles } from "lucide-react";
 import { Navbar } from "../components/navbar/Navbar";
 import { Button } from "../components/ui/Button";
+
+export const metadata: Metadata = {
+  title: "Fix road issues and report local infrastructure problems | fix-my-roads",
+  description:
+    "Report potholes, streetlight outages, water leaks, and garbage issues in your area with fix-my-roads. Track local civic problems and help improve neighborhood infrastructure.",
+  keywords: [
+    "report road issues",
+    "pothole reporting",
+    "streetlight outage reports",
+    "water leak reporting",
+    "local infrastructure issues",
+    "municipal issue reporting"
+  ],
+  alternates: {
+    canonical: "https://fix-my-roads.netlify.app/"
+  },
+  openGraph: {
+    title: "Fix local road issues and report infrastructure problems",
+    description:
+      "Use fix-my-roads to report and track neighborhood road problems, utility issues, and city maintenance requests.",
+    url: "https://fix-my-roads.netlify.app/",
+    type: "website",
+    siteName: "fix-my-roads"
+  }
+};
 
 const issueTypes = [
   "Garbage accumulation",

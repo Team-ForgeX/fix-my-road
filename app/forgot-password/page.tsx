@@ -8,6 +8,19 @@ import { Input } from "../../components/ui/Input";
 export const metadata: Metadata = {
   title: "Forgot Password | fix-my-roads",
   description: "Reset your fix-my-roads password and regain access to your citizen report dashboard.",
+  keywords: [
+    "reset password",
+    "fix my road account recovery",
+    "forgot citizen password",
+    "recover road reporting account"
+  ],
+  alternates: {
+    canonical: "https://fix-my-roads.netlify.app/forgot-password"
+  },
+  robots: {
+    index: false,
+    follow: false
+  }
 };
 
 export default function ForgotPasswordPage() {
