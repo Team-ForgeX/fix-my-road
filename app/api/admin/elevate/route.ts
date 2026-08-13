@@ -14,7 +14,14 @@ export async function POST(request: Request) {
     }
 
     // Verify the admin code
-    const adminCode = process.env.ADMIN_CODE || "ADMIN2024FIX";
+    const adminCode = process.env.ADMIN_CODE;
+
+    if (!adminCode) {
+      return NextResponse.json(
+        { success: false, error: "Admin system not configured." },
+        { status: 500 }
+      );
+    }
     
     if (code.trim() !== adminCode.trim()) {
       return NextResponse.json(
