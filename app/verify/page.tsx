@@ -1,17 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabaseClient";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
 
-export default function VerifyPage() {
+function VerifyPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [checking, setChecking] = useState(true);
   const [email, setEmail] = useState<string | null>(null);
   const [isVerified, setIsVerified] = useState(false);
   const [message, setMessage] = useState("Checking your email verification status...");
+
+  const verifyToken = async (token: string, targetEmail: string) => {
+    setChecking(true);
+    setMessage("Verifying your email address...");
+
+    const response = await fetch("/api/auth/verify-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, email: targetEmail })
+    });
+
+    const result = await response.json();
+    if (!response.ok || !result?.success) {
+      setMessage(result?.error || "This verification link is invalid or has expired.");
+      setChecking(false);
+      return;
+    }
+
+    setEmail(targetEmail);
+    setIsVerified(true);
+    setMessage("Your email has been verified successfully. Redirecting you to your dashboard...");
+    setChecking(false);
+
+    setTimeout(() => {
+      router.replace("/dashboard");
+    }, 1200);
+  };
 
   const checkStatus = async () => {
     setChecking(true);
@@ -32,7 +60,6 @@ export default function VerifyPage() {
     if (confirmed) {
       setMessage("Your email is verified! Setting up your profile...");
 
-      // Ensure profile row exists in case SQL trigger didn't run
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
@@ -69,8 +96,16 @@ export default function VerifyPage() {
   };
 
   useEffect(() => {
-    checkStatus();
-  }, []);
+    const token = searchParams.get("token");
+    const emailParam = searchParams.get("email");
+
+    if (token && emailParam) {
+      void verifyToken(token, emailParam);
+      return;
+    }
+
+    void checkStatus();
+  }, [searchParams]);
 
   const resendVerification = async () => {
     if (!email) {
@@ -135,5 +170,13 @@ export default function VerifyPage() {
         </Card>
       </main>
     </div>
+  );
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-950 text-white" /> }>
+      <VerifyPageContent />
+    </Suspense>
   );
 }

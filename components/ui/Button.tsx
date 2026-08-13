@@ -8,9 +8,9 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 const variantStyles: Record<NonNullable<ButtonProps["variant"]>, string> = {
-  primary: "bg-brand text-white hover:bg-teal-500 focus-visible:ring-teal-300",
-  secondary: "border border-slate-600 bg-slate-900 text-slate-100 hover:bg-slate-800",
-  ghost: "bg-transparent text-slate-200 hover:bg-slate-900"
+  primary: "brand-gradient text-white shadow-glow hover:brightness-110 focus-visible:ring-red-300",
+  secondary: "border border-white/10 bg-white/5 text-white hover:bg-white/10 focus-visible:ring-violet-300",
+  ghost: "bg-transparent text-white/90 hover:bg-white/5 focus-visible:ring-violet-300"
 };
 
 const sizeStyles: Record<NonNullable<ButtonProps["size"]>, string> = {
@@ -23,7 +23,7 @@ export function Button({ variant = "primary", size = "md", className, children, 
   return (
     <button
       className={clsx(
-        "inline-flex items-center justify-center rounded-xl font-medium transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none",
+        "inline-flex items-center justify-center rounded-xl font-medium transition-all duration-200 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[#09090b] focus-visible:outline-none",
         variantStyles[variant],
         sizeStyles[size],
         className

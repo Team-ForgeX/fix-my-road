@@ -177,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const sessionUser = data?.session?.user;
+        const sessionUser = data?.session?.user;
       if (!sessionUser?.id) {
         setUser(null);
         setReady(true);
@@ -189,7 +189,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       if (!profileResult.success || !profileResult.user) {
         console.warn(profileResult.error);
-        setUser(null);
+        setUser({
+          id: sessionUser.id,
+          full_name: sessionUser.user_metadata?.full_name || "User",
+          phone: sessionUser.user_metadata?.phone || null,
+          role: sessionUser.user_metadata?.role || "client",
+          email: sessionUser.email ?? "",
+          verified: isConfirmed,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
       } else {
         setUser(profileResult.user);
       }
@@ -214,7 +223,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       if (!profileResult.success || !profileResult.user) {
         console.warn(profileResult.error);
-        setUser(null);
+        setUser({
+          id: sessionUser.id,
+          full_name: sessionUser.user_metadata?.full_name || "User",
+          phone: sessionUser.user_metadata?.phone || null,
+          role: sessionUser.user_metadata?.role || "client",
+          email: sessionUser.email ?? "",
+          verified: isConfirmed,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
       } else {
         setUser(profileResult.user);
       }
@@ -240,24 +258,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const normalizedEmail = email.trim().toLowerCase();
 
-    const response = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: normalizedEmail, password })
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password
     });
 
-    const data = await response.json();
-
-    if (!response.ok || !data?.success || !data?.user) {
-      return { success: false, error: data?.error ?? "Unable to sign in." };
+    if (authError || !authData?.user) {
+      return { success: false, error: authError?.message ?? "Unable to sign in." };
     }
 
-    const profileUser = data.user as AuthUser;
-    setUser(profileUser);
+    const isConfirmed = Boolean(authData.user.email_confirmed_at);
+    const profileResult = await loadProfile(authData.user.id, authData.user.email ?? "", isConfirmed);
+
+    if (!profileResult.success || !profileResult.user) {
+      const fallbackUser: AuthUser = {
+        id: authData.user.id,
+        full_name: authData.user.user_metadata?.full_name || normalizedEmail.split("@")[0] || "User",
+        phone: authData.user.user_metadata?.phone || null,
+        role: authData.user.user_metadata?.role || "client",
+        email: authData.user.email ?? normalizedEmail,
+        verified: isConfirmed,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      setUser(fallbackUser);
+      return {
+        success: true,
+        needsVerification: !fallbackUser.verified,
+        user: fallbackUser
+      };
+    }
+
+    setUser(profileResult.user);
     return {
       success: true,
-      needsVerification: !profileUser.verified,
-      user: profileUser
+      needsVerification: !profileResult.user.verified,
+      user: profileResult.user
     };
   };
 

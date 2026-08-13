@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 import { createAdminClient } from "../../../../lib/supabase/admin";
-import { createClient } from "../../../../lib/supabase/server";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const email = String(body?.email ?? "").trim().toLowerCase();
@@ -15,7 +15,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = createClient();
+    const response = NextResponse.json({ success: true });
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
+          }
+        }
+      }
+    );
 
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -99,17 +115,25 @@ export async function POST(request: Request) {
     }
 
     const normalizedRole = resolvedProfile.role === "admin" ? "admin" : "client";
+    const verified = Boolean(authData.user.email_confirmed_at);
 
-    return NextResponse.json({
+    const finalResponse = NextResponse.json({
       success: true,
       user: {
         id: resolvedProfile.id,
         full_name: resolvedProfile.full_name,
         email: authData.user.email,
         phone: resolvedProfile.phone,
-        role: normalizedRole
+        role: normalizedRole,
+        verified
       }
+    }, { status: 200 });
+
+    response.cookies.getAll().forEach((cookie) => {
+      finalResponse.cookies.set(cookie.name, cookie.value, cookie);
     });
+
+    return finalResponse;
   } catch (error: any) {
     console.error("Login route error:", error);
     return NextResponse.json(

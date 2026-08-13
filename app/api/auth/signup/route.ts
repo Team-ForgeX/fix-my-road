@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../../../lib/supabase/server";
+import { createAdminClient } from "../../../../lib/supabase/admin";
+import { generateVerificationToken, sendVerificationEmail } from "../../../../lib/email";
 
 export async function POST(request: Request) {
   try {
@@ -66,6 +68,36 @@ export async function POST(request: Request) {
         { success: false, error: msg },
         { status: 500 }
       );
+    }
+
+    const smtpConfigured = Boolean(
+      process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS
+    );
+
+    if (smtpConfigured) {
+      const verificationToken = generateVerificationToken();
+      const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
+      const adminClient = createAdminClient();
+
+      await adminClient.auth.admin.updateUserById(authData.user.id, {
+        user_metadata: {
+          ...(authData.user.user_metadata ?? {}),
+          full_name: fullName,
+          phone: phone || null,
+          role: normalizedRole,
+          email_verification_token: verificationToken,
+          email_verification_expires_at: expiresAt
+        }
+      });
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+      await sendVerificationEmail({
+        email,
+        fullName,
+        userId: authData.user.id,
+        appUrl,
+        token: verificationToken
+      });
     }
 
     return NextResponse.json({
