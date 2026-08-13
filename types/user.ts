@@ -4,6 +4,7 @@ export type UserProfile = {
   id: string;
   full_name: string;
   phone?: string | null;
+  phone?: string | null;
   role: UserRole;
   created_at?: string;
   updated_at?: string;

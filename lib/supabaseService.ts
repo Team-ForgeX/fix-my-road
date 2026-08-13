@@ -69,7 +69,9 @@ export async function createCitizenProfile(profile: {
       full_name: profile.full_name,
       phone: profile.phone || null,
       role: profile.role || "client"
+      role: profile.role || "client"
     })
+    .select("id, full_name, role, phone, created_at, updated_at")
     .select("id, full_name, role, phone, created_at, updated_at")
     .single();
 }

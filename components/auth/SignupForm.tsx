@@ -125,8 +125,8 @@ export function SignupForm() {
               <ul className="space-y-2 text-sm text-slate-400">
                 <li>• Check your email inbox for the verification message</li>
                 <li>• Click the verification link in the email</li>
-                <li>• You&apos;ll be redirected to verify your identity</li>
-                <li>• After identity verification, you can start reporting issues!</li>
+                <li>• Your account profile will be created automatically once verified</li>
+                <li>• You can then log in and start reporting issues!</li>
               </ul>
             </div>
 

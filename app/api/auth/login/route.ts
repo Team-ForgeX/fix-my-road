@@ -38,6 +38,7 @@ export async function POST(request: Request) {
 
     const adminDb = createAdminClient();
 
+    // Fetch profile from public.profiles
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id, full_name, phone, role, created_at, updated_at")
