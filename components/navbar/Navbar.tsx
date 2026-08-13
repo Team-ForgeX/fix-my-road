@@ -50,7 +50,7 @@ export function Navbar() {
         <nav className="hidden items-center gap-6 md:flex" aria-label="Primary navigation">
           <ul className="flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1.5">
             {navLinks.map((link) => {
-              const isActive = pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href));
+              const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
 
               return (
                 <li key={link.href}>
