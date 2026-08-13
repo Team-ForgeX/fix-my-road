@@ -51,7 +51,7 @@ export type ExecuteAdminActionResult = AdminActionSuccess | SupabaseFallbackResu
 export async function fetchUserProfile(userId: string) {
   return supabase
     .from("profiles")
-    .select("id, full_name, role, avatar_url, phone, identity_verified")
+    .select("id, full_name, role, phone, created_at, updated_at")
     .eq("id", userId)
     .single<UserProfile>();
 }
@@ -60,8 +60,7 @@ export async function createCitizenProfile(profile: {
   id: string;
   full_name: string;
   phone?: string | null;
-  avatar_url?: string | null;
-  role?: "citizen" | "admin" | "officer";
+  role?: "client" | "citizen" | "admin";
 }) {
   return supabase
     .from("profiles")
@@ -69,20 +68,18 @@ export async function createCitizenProfile(profile: {
       id: profile.id,
       full_name: profile.full_name,
       phone: profile.phone || null,
-      avatar_url: profile.avatar_url || null,
-      role: profile.role || "citizen",
-      identity_verified: false
+      role: profile.role || "client"
     })
-    .select("id, full_name, role, avatar_url, phone, identity_verified")
+    .select("id, full_name, role, phone, created_at, updated_at")
     .single();
 }
 
-export async function updateIdentityVerification(userId: string) {
+export async function updateIdentityVerification(userId: string, verified: boolean) {
   return supabase
     .from("profiles")
-    .update({ identity_verified: true, updated_at: new Date().toISOString() })
+    .update({ identity_verified: verified, updated_at: new Date().toISOString() })
     .eq("id", userId)
-    .select("id, full_name, role, avatar_url, phone, identity_verified")
+    .select("id, identity_verified")
     .single();
 }
 

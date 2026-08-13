@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "../../../../lib/supabaseClient";
+import { createClient } from "../../../../lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
@@ -8,6 +8,7 @@ export async function POST(request: Request) {
     const email = String(body?.email ?? "").trim().toLowerCase();
     const phone = String(body?.phone ?? "").trim();
     const password = String(body?.password ?? "");
+    const requestedRole = String(body?.role ?? "client").trim();
 
     if (!fullName || !email || !password) {
       return NextResponse.json(
@@ -31,15 +32,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const supabase = createClient();
+    const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` : undefined,
+        emailRedirectTo: `${origin}/verify`,
         data: {
           full_name: fullName,
           phone: phone || null,
-          role: "citizen"
+          requested_role: requestedRole === "admin" ? "admin" : "client"
         }
       }
     });
@@ -63,15 +67,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Verification email sent. Please click the verification link before completing account setup.",
+      message: "Verification email sent. Please check your email to confirm your account.",
       user: {
         id: authData.user.id,
-        full_name: fullName,
-        email,
-        phone: phone || null,
-        role: "citizen",
-        avatar_url: `https://avatars.dicebear.com/api/identicon/${encodeURIComponent(fullName)}.svg`,
-        verified: false
+        email
       }
     });
   } catch (error: any) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { supabase } from "../../../../lib/supabaseClient";
+import { createAdminClient } from "../../../../lib/supabase/admin";
+import { createClient } from "../../../../lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +14,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const supabase = createClient();
 
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
@@ -28,42 +31,69 @@ export async function POST(request: Request) {
 
     if (!authData.user.email_confirmed_at) {
       return NextResponse.json(
-        { success: false, error: "Email is not verified. Please confirm your email first." },
+        { success: false, error: "Email is not verified. Please confirm your email first.", needsVerification: true },
         { status: 403 }
       );
     }
 
+    const adminDb = createAdminClient();
+
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, full_name, email, phone, role, avatar_url, identity_verified")
+      .select("id, full_name, phone, role, created_at, updated_at")
       .eq("id", authData.user.id)
       .maybeSingle();
+
+    let resolvedProfile = profile;
 
     if (profileError) {
       console.error("Profile lookup error:", profileError.message);
       return NextResponse.json(
-        { success: false, error: "Unable to read account information." },
+        { success: false, error: "Unable to read account profile." },
         { status: 500 }
       );
     }
 
-    if (!profile) {
-      return NextResponse.json(
-        { success: false, error: "Account profile not found. Please complete email verification and profile creation." },
-        { status: 404 }
-      );
+    if (!resolvedProfile) {
+      const emailValue = authData.user.email ?? "";
+      const baseName = authData.user.user_metadata?.full_name || emailValue.split("@")[0] || "User";
+      const fallbackFullName = String(baseName).trim() || "User";
+
+      const { data: createdProfile, error: createProfileError } = await adminDb
+        .from("profiles")
+        .upsert(
+          {
+            id: authData.user.id,
+            full_name: fallbackFullName,
+            phone: authData.user.user_metadata?.phone ?? null,
+            role: "client"
+          },
+          { onConflict: "id" }
+        )
+        .select("id, full_name, phone, role, created_at, updated_at")
+        .single();
+
+      if (createProfileError || !createdProfile) {
+        console.error("Fallback profile creation error:", createProfileError?.message ?? "Unknown profile creation error");
+        return NextResponse.json(
+          { success: false, error: "Unable to read account profile. Please create a profile for this user in Supabase." },
+          { status: 500 }
+        );
+      }
+
+      resolvedProfile = createdProfile;
     }
+
+    const normalizedRole = resolvedProfile.role === "admin" ? "admin" : "client";
 
     return NextResponse.json({
       success: true,
       user: {
-        id: profile.id,
-        full_name: profile.full_name,
-        email: profile.email,
-        phone: profile.phone,
-        role: profile.role,
-        avatar_url: profile.avatar_url,
-        verified: Boolean(profile.identity_verified)
+        id: resolvedProfile.id,
+        full_name: resolvedProfile.full_name,
+        email: authData.user.email,
+        phone: resolvedProfile.phone,
+        role: normalizedRole
       }
     });
   } catch (error: any) {
