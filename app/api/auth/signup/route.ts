@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       email,
       password,
       options: {
-        emailRedirectTo: process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/verify` : undefined,
+        emailRedirectTo: process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback` : undefined,
         data: {
           full_name: fullName,
           phone: phone || null,
