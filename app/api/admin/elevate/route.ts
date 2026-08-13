@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
+import { supabase } from "../../../../lib/supabaseClient";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { code } = body;
+    const { userId, email, code } = body;
+
+    if (!userId || typeof userId !== "string") {
+      return NextResponse.json(
+        { success: false, error: "User session is required." },
+        { status: 400 }
+      );
+    }
 
     if (!code || typeof code !== "string") {
       return NextResponse.json(
@@ -12,9 +20,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify the admin code
     const adminCode = process.env.ADMIN_CODE;
-
     if (!adminCode) {
       console.error("ADMIN_CODE environment variable not configured");
       return NextResponse.json(
@@ -23,21 +29,43 @@ export async function POST(request: Request) {
       );
     }
 
-    const codeMatch = code.trim() === adminCode.trim();
-    console.log("Admin code verification:", { 
-      providedLength: code.trim().length,
-      expectedLength: adminCode.trim().length,
-      match: codeMatch
-    });
-    
-    if (!codeMatch) {
+    if (code.trim() !== adminCode.trim()) {
       return NextResponse.json(
         { success: false, error: "Invalid admin access code." },
         { status: 401 }
       );
     }
 
-    return NextResponse.json({ success: true, message: "Admin code verified." });
+    const { data: userData, error: userError } = await supabase.auth.admin.getUserById(userId);
+    if (userError || !userData?.user) {
+      return NextResponse.json(
+        { success: false, error: "Authenticated user not found." },
+        { status: 404 }
+      );
+    }
+
+    if (email && userData.user.email && userData.user.email.toLowerCase() !== String(email).trim().toLowerCase()) {
+      return NextResponse.json(
+        { success: false, error: "User identity mismatch." },
+        { status: 403 }
+      );
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .update({ role: "admin", updated_at: new Date().toISOString() })
+      .eq("id", userId)
+      .select("id, role")
+      .single();
+
+    if (profileError || !profile) {
+      return NextResponse.json(
+        { success: false, error: profileError?.message ?? "Unable to update admin role." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ success: true, message: "Admin code verified and role updated." });
   } catch (err: any) {
     console.error("Admin code verification error:", err);
     return NextResponse.json(

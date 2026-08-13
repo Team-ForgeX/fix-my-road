@@ -266,7 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const response = await fetch("/api/admin/elevate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: adminCode.trim() })
+      body: JSON.stringify({ userId, email, code: adminCode.trim() })
     });
 
     const data = await response.json();
@@ -324,19 +324,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(
-        "fixmyroad_pending_signup",
-        JSON.stringify({
-          full_name: full_name.trim(),
-          email: normalizedEmail,
-          phone: phone.trim(),
-          password,
-          role: isAdmin ? "admin" : "citizen"
-        })
-      );
-    }
-
     const signupResponse = await fetch("/api/auth/signup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -352,14 +339,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const signupData = await signupResponse.json();
 
     if (!signupResponse.ok || !signupData?.success || !signupData?.user) {
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem("fixmyroad_pending_signup");
-      }
       return { success: false, error: signupData?.error ?? "Unable to create account." };
     }
 
-    const nextUser = signupData.user as AuthUser;
-    setUser(nextUser);
     return {
       success: true,
       needsEmailVerification: true,

@@ -23,24 +23,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const { data: existingUser, error: existingError } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("email", email)
-      .maybeSingle();
-
-    if (existingError) {
-      console.error("Profile lookup error:", existingError.message);
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email)) {
       return NextResponse.json(
-        { success: false, error: "Unable to validate the email address." },
-        { status: 500 }
-      );
-    }
-
-    if (existingUser) {
-      return NextResponse.json(
-        { success: false, error: "This email is already registered." },
-        { status: 409 }
+        { success: false, error: "Please enter a valid email address." },
+        { status: 400 }
       );
     }
 
@@ -58,8 +45,18 @@ export async function POST(request: Request) {
     });
 
     if (authError || !authData?.user) {
+      const msg = authError?.message ?? "Unable to create auth account.";
+      const normalized = msg.toLowerCase();
+
+      if (normalized.includes("already") || normalized.includes("registered") || normalized.includes("exists")) {
+        return NextResponse.json(
+          { success: false, error: "This email is already registered." },
+          { status: 409 }
+        );
+      }
+
       return NextResponse.json(
-        { success: false, error: authError?.message ?? "Unable to create auth account." },
+        { success: false, error: msg },
         { status: 500 }
       );
     }
