@@ -1,6 +1,7 @@
 -- Enable RLS on profiles table
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
+
 -- 1. Users can view their own profile
 CREATE POLICY "Users can view own profile"
 ON public.profiles FOR SELECT

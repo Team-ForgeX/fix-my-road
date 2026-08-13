@@ -47,8 +47,6 @@ type AuthContextValue = {
     email: string;
     phone: string;
     password: string;
-    isAdmin?: boolean;
-    adminCode?: string;
   }) => Promise<{ success: boolean; error?: string; needsEmailVerification?: boolean; message?: string }>;
   verifyIdentity: (otp: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -139,11 +137,18 @@ const initialNotifications = (): AppNotification[] => {
   return readJson<AppNotification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
 };
 
+const resolveRole = (role?: string | null, fallback: "client" | "admin" = "client") => {
+  if (role === "admin") return "admin";
+  if (role === "client") return "client";
+  return fallback;
+};
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function buildAuthUser(profile: UserProfile, email: string, emailConfirmed: boolean): AuthUser {
   return {
     ...profile,
+    role: resolveRole(profile.role, "client"),
     email,
     verified: emailConfirmed
   };
@@ -151,11 +156,25 @@ function buildAuthUser(profile: UserProfile, email: string, emailConfirmed: bool
 
 async function loadProfile(userId: string, email: string, emailConfirmed: boolean) {
   const profileResult = await fetchUserProfile(userId);
-  if (profileResult.error || !profileResult.data) {
-    return { success: false, error: profileResult.error?.message ?? "Profile not found." };
+  if (profileResult.data) {
+    return { success: true, user: buildAuthUser(profileResult.data, email, emailConfirmed) };
   }
-  return { success: true, user: buildAuthUser(profileResult.data, email, emailConfirmed) };
+
+  // Profile missing - auto create fallback citizen profile
+  const fallbackName = email ? email.split("@")[0] : "User";
+  const { data: newProfile, error: createError } = await createCitizenProfile({
+    id: userId,
+    full_name: fallbackName,
+    role: "client"
+  });
+
+  if (!createError && newProfile) {
+    return { success: true, user: buildAuthUser(newProfile, email, emailConfirmed) };
+  }
+
+  return { success: false, error: profileResult.error?.message ?? "Profile not found." };
 }
+
 
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -193,14 +212,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: sessionUser.id,
           full_name: sessionUser.user_metadata?.full_name || "User",
           phone: sessionUser.user_metadata?.phone || null,
-          role: sessionUser.user_metadata?.role || "client",
+          role: resolveRole(sessionUser.user_metadata?.role, "client"),
           email: sessionUser.email ?? "",
           verified: isConfirmed,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
       } else {
-        setUser(profileResult.user);
+        setUser({
+          ...profileResult.user,
+          role: resolveRole(profileResult.user.role, "client")
+        });
       }
       setReady(true);
     };
@@ -227,14 +249,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           id: sessionUser.id,
           full_name: sessionUser.user_metadata?.full_name || "User",
           phone: sessionUser.user_metadata?.phone || null,
-          role: sessionUser.user_metadata?.role || "client",
+          role: resolveRole(sessionUser.user_metadata?.role, "client"),
           email: sessionUser.email ?? "",
           verified: isConfirmed,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
       } else {
-        setUser(profileResult.user);
+        setUser({
+          ...profileResult.user,
+          role: resolveRole(profileResult.user.role, "client")
+        });
       }
       setReady(true);
     });
@@ -268,6 +293,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const isConfirmed = Boolean(authData.user.email_confirmed_at);
+    const metadataRole = authData.user.user_metadata?.role === "admin" ? "admin" : "client";
     const profileResult = await loadProfile(authData.user.id, authData.user.email ?? "", isConfirmed);
 
     if (!profileResult.success || !profileResult.user) {
@@ -275,13 +301,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: authData.user.id,
         full_name: authData.user.user_metadata?.full_name || normalizedEmail.split("@")[0] || "User",
         phone: authData.user.user_metadata?.phone || null,
-        role: authData.user.user_metadata?.role || "client",
+        role: resolveRole(metadataRole, "client"),
         email: authData.user.email ?? normalizedEmail,
         verified: isConfirmed,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
       setUser(fallbackUser);
+      setReady(true);
       return {
         success: true,
         needsVerification: !fallbackUser.verified,
@@ -289,11 +316,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    setUser(profileResult.user);
+    const resolvedUser: AuthUser = {
+      ...profileResult.user,
+      role: resolveRole(profileResult.user.role, resolveRole(metadataRole, "client"))
+    };
+
+    setUser(resolvedUser);
+    setReady(true);
     return {
       success: true,
-      needsVerification: !profileResult.user.verified,
-      user: profileResult.user
+      needsVerification: !resolvedUser.verified,
+      user: resolvedUser
     };
   };
 
@@ -332,16 +365,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     full_name,
     email,
     phone,
-    password,
-    isAdmin = false,
-    adminCode = ""
+    password
   }: {
     full_name: string;
     email: string;
     phone: string;
     password: string;
-    isAdmin?: boolean;
-    adminCode?: string;
   }) => {
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -353,7 +382,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: normalizedEmail,
         phone: phone.trim(),
         password,
-        role: isAdmin ? "admin" : "client"
+        role: "client"
       })
     });
 
@@ -381,40 +410,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
     setUser(null);
+    setReady(false);
+
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "global" });
+      if (error) {
+        console.warn("Sign out error:", error.message);
+      }
+    } finally {
+      setUser(null);
+      setReady(true);
+    }
   };
 
-  const adminLogin = async (email: string, password: string, adminCode: string) => {
-    // First attempt login
+  const adminLogin = async (email: string, password: string, _adminCode?: string) => {
     const result = await login(email, password);
     if (!result.success) {
       return result;
     }
 
-    // Then verify the admin code and elevate
-    if (!adminCode.trim()) {
+    if (!result.user || result.user.role !== "admin") {
       await logout();
-      return { success: false, error: "Admin access code is required." };
+      return { success: false, error: "This account is not configured as an admin." };
     }
 
-    const response = await fetch("/api/admin/elevate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: adminCode.trim() })
-    });
-
-    const codeVerification = await response.json();
-    if (!response.ok || !codeVerification.success) {
-      await logout();
-      return { success: false, error: codeVerification.error ?? "Invalid admin access code." };
-    }
-
-    if (!codeVerification.user || codeVerification.user.role !== "admin") {
-      await logout();
-      return { success: false, error: "Admin access required. This account does not have admin privileges." };
-    }
-    return { success: true };
+    return { success: true, user: result.user };
   };
 
   const adminLogout = async () => {

@@ -35,6 +35,7 @@ export function Navbar() {
       await logout();
     }
     router.push("/");
+    router.refresh();
   };
 
   return (

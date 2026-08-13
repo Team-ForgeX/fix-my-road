@@ -36,11 +36,24 @@ export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Protect client authenticated routes
-  const isAuthRoute = ["/dashboard", "/profile", "/report", "/reports"].some(
+  const isAuthRoute = ["/dashboard", "/profile", "/report", "/reports", "/nearby", "/notifications"].some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );
 
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
+  const isGuestOnlyRoute = pathname === "/login" || pathname === "/signup";
+
+  if (isGuestOnlyRoute && user && user.email_confirmed_at) {
+    const url = request.nextUrl.clone();
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    url.pathname = profile?.role === "admin" ? "/admin" : "/dashboard";
+    return NextResponse.redirect(url);
+  }
 
   if (isAuthRoute || isAdminRoute) {
     if (!user) {
@@ -69,6 +82,7 @@ export async function updateSession(request: NextRequest) {
       }
     }
   }
+
 
   return supabaseResponse;
 }

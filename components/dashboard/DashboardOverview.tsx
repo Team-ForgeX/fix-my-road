@@ -63,10 +63,11 @@ export function DashboardOverview() {
                   <h2 className="text-2xl font-semibold text-white">Reports submitted by you</h2>
                 </div>
               </div>
-              <RecentReports reports={reports.filter((report) => report.user_id === user.id).slice(0, 3)} />
+              <RecentReports reports={reports.filter((report) => report?.user_id === user?.id).slice(0, 3)} />
             </div>
 
-            <MapOverview reports={reports.filter((report) => report.user_id === user.id)} />
+            <MapOverview reports={reports.filter((report) => report?.user_id === user?.id)} />
+
           </section>
 
           <section className="space-y-6">

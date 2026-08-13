@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     const email = String(body?.email ?? "").trim().toLowerCase();
     const phone = String(body?.phone ?? "").trim();
     const password = String(body?.password ?? "");
-    const requestedRole = String(body?.role ?? "client").trim();
+    const requestedRole = "client";
 
     if (!fullName || !email || !password) {
       return NextResponse.json(
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     const supabase = createClient();
     const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
 
-    const normalizedRole = requestedRole === "admin" ? "admin" : "client";
+    const normalizedRole = "client";
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,

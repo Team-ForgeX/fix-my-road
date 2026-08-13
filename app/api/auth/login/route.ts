@@ -53,25 +53,18 @@ export async function POST(request: NextRequest) {
     }
 
     const adminDb = createAdminClient();
+    const metadataRole = authData.user.user_metadata?.role === "admin" ? "admin" : "client";
 
-    console.log("🔍 About to fetch profile for user:", authData.user.id);
-    console.log("🔍 Service role key env:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "✅ Present" : "❌ Missing");
-
-    // Fetch profile from public.profiles using the admin client so the post-sign-in
-    // lookup is not blocked by RLS/session propagation timing.
     const { data: profile, error: profileError } = await adminDb
       .from("profiles")
       .select("id, full_name, phone, role, created_at, updated_at")
       .eq("id", authData.user.id)
       .maybeSingle();
 
-    console.log("📊 Profile lookup result:", { profile, profileError: profileError?.message });
-
     let resolvedProfile = profile;
 
     if (profileError) {
-      console.error("❌ Profile lookup error:", profileError.message);
-      console.error("Full error details:", profileError);
+      console.error("Profile lookup error:", profileError.message);
       return NextResponse.json(
         { success: false, error: "Unable to read account profile: " + profileError.message },
         { status: 500 }
@@ -79,12 +72,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (!resolvedProfile) {
-      console.log("⚠️ No profile found, attempting to create fallback profile...");
       const emailValue = authData.user.email ?? "";
       const baseName = authData.user.user_metadata?.full_name || emailValue.split("@")[0] || "User";
       const fallbackFullName = String(baseName).trim() || "User";
-
-      console.log("📝 Creating profile with:", { id: authData.user.id, full_name: fallbackFullName });
 
       const { data: createdProfile, error: createProfileError } = await adminDb
         .from("profiles")
@@ -93,18 +83,14 @@ export async function POST(request: NextRequest) {
             id: authData.user.id,
             full_name: fallbackFullName,
             phone: authData.user.user_metadata?.phone ?? null,
-            role: "client"
+            role: metadataRole
           },
           { onConflict: "id" }
         )
         .select("id, full_name, phone, role, created_at, updated_at")
         .single();
 
-      console.log("📊 Profile creation result:", { createdProfile, createProfileError: createProfileError?.message });
-
       if (createProfileError || !createdProfile) {
-        console.error("❌ Fallback profile creation error:", createProfileError?.message ?? "Unknown profile creation error");
-        console.error("Full error details:", createProfileError);
         return NextResponse.json(
           { success: false, error: "Profile creation failed: " + (createProfileError?.message ?? "Unknown error") },
           { status: 500 }
@@ -114,7 +100,7 @@ export async function POST(request: NextRequest) {
       resolvedProfile = createdProfile;
     }
 
-    const normalizedRole = resolvedProfile.role === "admin" ? "admin" : "client";
+    const normalizedRole = resolvedProfile.role === "admin" ? "admin" : metadataRole;
     const verified = Boolean(authData.user.email_confirmed_at);
 
     const finalResponse = NextResponse.json({
