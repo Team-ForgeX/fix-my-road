@@ -350,8 +350,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const adminLogin = async (email: string, password: string, adminCode: string) => {
-    // First verify the admin code
+    // First attempt login
+    const result = await login(email, password);
+    if (!result.success) {
+      return result;
+    }
+
+    // Then verify the admin code and elevate
     if (!adminCode.trim()) {
+      await logout();
       return { success: false, error: "Admin access code is required." };
     }
 
@@ -363,15 +370,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const codeVerification = await response.json();
     if (!response.ok || !codeVerification.success) {
+      await logout();
       return { success: false, error: codeVerification.error ?? "Invalid admin access code." };
     }
 
-    // Then attempt login
-    const result = await login(email, password);
-    if (!result.success) {
-      return result;
-    }
-    if (!result.user || result.user.role !== "admin") {
+    if (!codeVerification.user || codeVerification.user.role !== "admin") {
       await logout();
       return { success: false, error: "Admin access required. This account does not have admin privileges." };
     }

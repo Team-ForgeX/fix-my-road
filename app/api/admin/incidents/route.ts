@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { executeAdminAction, supabase } from "../../../../lib/supabaseService";
+import { createClient } from "../../../../lib/supabase/server";
 
 export async function GET() {
   try {
@@ -20,19 +21,44 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
-    const body = await request.json();
-    const { incidentId, adminId, newStatus, departmentId, officerId, note } = body;
+    // Verify authenticated user is an admin
+    const supabaseServer = createClient();
+    const { data: { user }, error: userError } = await supabaseServer.auth.getUser();
 
-    if (!incidentId || !adminId || !newStatus) {
+    if (userError || !user) {
       return NextResponse.json(
-        { success: false, error: "Missing required parameters: incidentId, adminId, newStatus." },
+        { success: false, error: "Authentication required." },
+        { status: 401 }
+      );
+    }
+
+    // Check if user has admin role
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (profileError || !profile || profile.role !== "admin") {
+      return NextResponse.json(
+        { success: false, error: "Admin privileges required." },
+        { status: 403 }
+      );
+    }
+
+    const body = await request.json();
+    const { incidentId, newStatus, departmentId, officerId, note } = body;
+
+    if (!incidentId || !newStatus) {
+      return NextResponse.json(
+        { success: false, error: "Missing required parameters: incidentId, newStatus." },
         { status: 400 }
       );
     }
 
     const result = await executeAdminAction({
       incidentId,
-      adminId,
+      adminId: user.id,  // Use authenticated user's ID, not from request body
       newStatus,
       departmentId,
       officerId,

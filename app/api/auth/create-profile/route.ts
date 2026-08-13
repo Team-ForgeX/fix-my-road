@@ -1,15 +1,27 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "../../../../lib/supabase/admin";
 import { createCitizenProfile } from "../../../../lib/supabaseService";
+import { createClient } from "../../../../lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { userId, fullName, role, phone } = body;
+    // Verify authenticated user
+    const supabaseServer = createClient();
+    const { data: { user }, error: userError } = await supabaseServer.auth.getUser();
 
-    if (!userId || !fullName) {
+    if (userError || !user) {
       return NextResponse.json(
-        { success: false, error: "User ID and full name are required." },
+        { success: false, error: "Authentication required." },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    const { fullName, phone } = body;
+
+    if (!fullName) {
+      return NextResponse.json(
+        { success: false, error: "Full name is required." },
         { status: 400 }
       );
     }
@@ -17,9 +29,9 @@ export async function POST(request: Request) {
     const adminDb = createAdminClient();
 
     // Verify the user exists and email is confirmed
-    const { data: userData, error: userError } = await adminDb.auth.admin.getUserById(userId);
+    const { data: userData, error: userDataError } = await adminDb.auth.admin.getUserById(user.id);
 
-    if (userError || !userData?.user) {
+    if (userDataError || !userData?.user) {
       return NextResponse.json(
         { success: false, error: "User not found." },
         { status: 404 }
@@ -37,21 +49,19 @@ export async function POST(request: Request) {
     const { data: existingProfile } = await adminDb
       .from("profiles")
       .select("id")
-      .eq("id", userId)
+      .eq("id", user.id)
       .maybeSingle();
 
     if (existingProfile) {
       return NextResponse.json({ success: true, message: "Profile already exists." });
     }
 
-    const normalizedRole = role === "admin" ? "admin" : "client";
-
-    // Create the profile with the appropriate role
+    // Default to 'client' role - never allow specifying role from request
     const profileResult = await createCitizenProfile({
-      id: userId,
+      id: user.id,
       full_name: fullName.trim(),
       phone: phone || null,
-      role: normalizedRole
+      role: "client"  // Always default to client for new profiles
     });
 
     if (profileResult.error || !profileResult.data) {

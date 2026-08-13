@@ -1,19 +1,46 @@
 import { NextResponse } from "next/server";
 import { submitReportToSupabase, supabase } from "../../../lib/supabaseService";
+import { createClient } from "../../../lib/supabase/server";
 
 export async function GET(request: Request) {
   try {
+    // Verify authenticated user
+    const supabaseServer = createClient();
+    const { data: { user }, error: userError } = await supabaseServer.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json(
+        { success: false, error: "Authentication required." },
+        { status: 401 }
+      );
+    }
+
+    // Check if user is admin
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    const isAdmin = profile?.role === "admin";
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
     const incidentId = searchParams.get("incidentId");
 
     let query = supabase.from("reports").select("*, report_media(*)");
 
-    if (userId) {
-      query = query.eq("user_id", userId);
-    }
-    if (incidentId) {
-      query = query.eq("incident_id", incidentId);
+    // Users can only see their own reports, unless they're admin
+    if (isAdmin) {
+      if (userId) {
+        query = query.eq("user_id", userId);
+      }
+      if (incidentId) {
+        query = query.eq("incident_id", incidentId);
+      }
+    } else {
+      // Non-admin users can only see their own reports
+      query = query.eq("user_id", user.id);
     }
 
     const { data: reports, error } = await query.order("created_at", { ascending: false });
@@ -30,8 +57,18 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    // Verify authenticated user
+    const supabaseServer = createClient();
+    const { data: { user }, error: userError } = await supabaseServer.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json(
+        { success: false, error: "Authentication required." },
+        { status: 401 }
+      );
+    }
+
     const formData = await request.formData();
-    const userId = formData.get("userId") as string;
     const description = formData.get("description") as string;
     const latitude = parseFloat(formData.get("latitude") as string || "0");
     const longitude = parseFloat(formData.get("longitude") as string || "0");
@@ -48,15 +85,15 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!userId || !description || !address) {
+    if (!description || !address) {
       return NextResponse.json(
-        { success: false, error: "Missing required fields: userId, description, address." },
+        { success: false, error: "Missing required fields: description, address." },
         { status: 400 }
       );
     }
 
     const result = await submitReportToSupabase({
-      userId,
+      userId: user.id,  // Use authenticated user's ID, not from form data
       description,
       latitude,
       longitude,

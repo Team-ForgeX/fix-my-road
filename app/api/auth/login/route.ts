@@ -38,6 +38,9 @@ export async function POST(request: Request) {
 
     const adminDb = createAdminClient();
 
+    console.log("🔍 About to fetch profile for user:", authData.user.id);
+    console.log("🔍 Service role key env:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "✅ Present" : "❌ Missing");
+
     // Fetch profile from public.profiles using the admin client so the post-sign-in
     // lookup is not blocked by RLS/session propagation timing.
     const { data: profile, error: profileError } = await adminDb
