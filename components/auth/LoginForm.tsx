@@ -1,25 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { Navbar } from "../navbar/Navbar";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Card } from "../ui/Card";
 import { useAuth } from "../AuthContext";
 
-type LoginMode = "citizen" | "admin";
+type AuthMode = "user" | "admin";
+
+const getModeFromParams = (searchParams: URLSearchParams): AuthMode =>
+  searchParams.get("role") === "admin" ? "admin" : "user";
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, ready, login, adminLogin } = useAuth();
-  const [mode, setMode] = useState<LoginMode>("citizen");
+  const initialMode = useMemo(() => getModeFromParams(searchParams), [searchParams]);
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [adminCode, setAdminCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
 
   useEffect(() => {
     if (!ready) return;
@@ -38,7 +47,15 @@ export function LoginForm() {
     router.replace("/dashboard");
   }, [ready, router, user]);
 
-  const handleCitizenSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const switchMode = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setError(null);
+    setAdminCode("");
+    const href = nextMode === "admin" ? "/login?role=admin" : "/login";
+    router.replace(href);
+  };
+
+  const handleUserSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setIsLoading(true);
@@ -88,6 +105,9 @@ export function LoginForm() {
     }
   };
 
+  const signupHref = mode === "user" ? "/signup?role=user" : "/signup?role=admin";
+  const signupLinkText = mode === "user" ? "Sign up as User" : "Sign up as Admin";
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />
@@ -95,42 +115,37 @@ export function LoginForm() {
         <Card className="w-full space-y-8 p-10">
           <div className="flex gap-4 border-b border-slate-700">
             <button
-              onClick={() => {
-                setMode("citizen");
-                setError(null);
-                setAdminCode("");
-              }}
-              className={`pb-3 px-1 font-medium text-sm uppercase tracking-[0.1em] border-b-2 transition ${
-                mode === "citizen"
+              type="button"
+              onClick={() => switchMode("user")}
+              className={`border-b-2 px-1 pb-3 text-sm font-medium uppercase tracking-[0.1em] transition ${
+                mode === "user"
                   ? "border-teal-400 text-teal-300"
                   : "border-transparent text-slate-400 hover:text-slate-300"
               }`}
             >
-              Citizen Login
+              User
             </button>
             <button
-              onClick={() => {
-                setMode("admin");
-                setError(null);
-              }}
-              className={`pb-3 px-1 font-medium text-sm uppercase tracking-[0.1em] border-b-2 transition ${
+              type="button"
+              onClick={() => switchMode("admin")}
+              className={`border-b-2 px-1 pb-3 text-sm font-medium uppercase tracking-[0.1em] transition ${
                 mode === "admin"
                   ? "border-teal-400 text-teal-300"
                   : "border-transparent text-slate-400 hover:text-slate-300"
               }`}
             >
-              Admin Login
+              Admin
             </button>
           </div>
 
-          {mode === "citizen" && (
+          {mode === "user" && (
             <>
               <div>
-                <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Citizen login</p>
+                <p className="text-sm uppercase tracking-[0.3em] text-teal-300">User login</p>
                 <h1 className="mt-3 text-3xl font-semibold text-white">Access your reports and updates</h1>
                 <p className="mt-2 text-slate-400">Sign in to submit a new issue, review pending reports, and track incident progress.</p>
               </div>
-              <form className="space-y-6" onSubmit={handleCitizenSubmit}>
+              <form className="space-y-6" onSubmit={handleUserSubmit}>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-300">Email address</label>
                   <Input
@@ -162,9 +177,9 @@ export function LoginForm() {
                 </Button>
               </form>
               <p className="text-center text-sm text-slate-400">
-                New to the platform?{' '}
-                <Link href="/signup" className="font-semibold text-teal-300 hover:text-teal-200">
-                  Create an account
+                Don't have an account? {" "}
+                <Link href={signupHref} className="font-semibold text-teal-300 hover:text-teal-200">
+                  {signupLinkText}
                 </Link>
               </p>
             </>
@@ -214,6 +229,12 @@ export function LoginForm() {
                   {isLoading ? "Verifying..." : "Admin Login"}
                 </Button>
               </form>
+              <p className="text-center text-sm text-slate-400">
+                Don't have an account? {" "}
+                <Link href={signupHref} className="font-semibold text-teal-300 hover:text-teal-200">
+                  {signupLinkText}
+                </Link>
+              </p>
             </>
           )}
         </Card>

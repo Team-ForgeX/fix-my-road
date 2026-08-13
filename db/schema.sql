@@ -7,6 +7,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   full_name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
   phone TEXT,
   role TEXT NOT NULL CHECK (role IN ('citizen', 'officer', 'admin')),
   avatar_url TEXT,

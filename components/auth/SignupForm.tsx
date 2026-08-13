@@ -1,28 +1,49 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { Navbar } from "../navbar/Navbar";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Card } from "../ui/Card";
 import { useAuth } from "../AuthContext";
 
+type AuthMode = "user" | "admin";
+
+const getModeFromParams = (searchParams: URLSearchParams): AuthMode =>
+  searchParams.get("role") === "admin" ? "admin" : "user";
+
 export function SignupForm() {
   const router = useRouter();
-  const { user, ready, signup } = useAuth();
+  const searchParams = useSearchParams();
+  const { signup } = useAuth();
+  const initialMode = useMemo(() => getModeFromParams(searchParams), [searchParams]);
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [isAdminAccount, setIsAdminAccount] = useState(false);
   const [adminCode, setAdminCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [emailVerificationSent, setEmailVerificationSent] = useState(false);
   const [signupEmail, setSignupEmail] = useState("");
+
+  useEffect(() => {
+    setMode(initialMode);
+  }, [initialMode]);
+
+  const switchMode = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setError(null);
+    setAdminCode("");
+    const href = nextMode === "admin" ? "/signup?role=admin" : "/signup?role=user";
+    router.replace(href);
+  };
+
+  const isAdminAccount = mode === "admin";
 
   const validation = useMemo(() => {
     return {
@@ -32,9 +53,10 @@ export function SignupForm() {
         email.trim() !== "" &&
         phone.trim() !== "" &&
         password.trim() !== "" &&
-        confirmPassword.trim() !== ""
+        confirmPassword.trim() !== "" &&
+        (!isAdminAccount || adminCode.trim() !== "")
     };
-  }, [confirmPassword, email, fullName, password, phone]);
+  }, [adminCode, confirmPassword, email, fullName, isAdminAccount, password, phone]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -42,7 +64,11 @@ export function SignupForm() {
     setIsLoading(true);
 
     if (!validation.completed || !validation.passwordsMatch) {
-      setError("Please complete all fields and ensure passwords match.");
+      setError(
+        isAdminAccount
+          ? "Please complete all fields, confirm the passwords, and enter the admin access code."
+          : "Please complete all fields and ensure passwords match."
+      );
       setIsLoading(false);
       return;
     }
@@ -124,6 +150,7 @@ export function SignupForm() {
                 setPhone("");
                 setPassword("");
                 setConfirmPassword("");
+                setAdminCode("");
                 setError(null);
               }}
             >
@@ -140,10 +167,43 @@ export function SignupForm() {
       <Navbar />
       <main className="mx-auto flex min-h-[calc(100vh-96px)] max-w-3xl items-center px-6 py-12 lg:px-8">
         <Card className="w-full space-y-8 p-10">
+          <div className="flex gap-4 border-b border-slate-700">
+            <button
+              type="button"
+              onClick={() => switchMode("user")}
+              className={`border-b-2 px-1 pb-3 text-sm font-medium uppercase tracking-[0.1em] transition ${
+                mode === "user"
+                  ? "border-teal-400 text-teal-300"
+                  : "border-transparent text-slate-400 hover:text-slate-300"
+              }`}
+            >
+              User
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode("admin")}
+              className={`border-b-2 px-1 pb-3 text-sm font-medium uppercase tracking-[0.1em] transition ${
+                mode === "admin"
+                  ? "border-teal-400 text-teal-300"
+                  : "border-transparent text-slate-400 hover:text-slate-300"
+              }`}
+            >
+              Admin
+            </button>
+          </div>
+
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Create account</p>
-            <h1 className="mt-3 text-3xl font-semibold text-white">Join the community reporting platform</h1>
-            <p className="mt-2 text-slate-400">Sign up to submit issues, follow updates, and see incident progress in your area.</p>
+            <p className="text-sm uppercase tracking-[0.3em] text-teal-300">
+              {mode === "user" ? "Create user account" : "Create admin account"}
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold text-white">
+              {mode === "user" ? "Join the community reporting platform" : "Secure city operations access"}
+            </h1>
+            <p className="mt-2 text-slate-400">
+              {mode === "user"
+                ? "Sign up to submit issues, follow updates, and see incident progress in your area."
+                : "Create a secure admin account to review reports and manage city maintenance workflows."}
+            </p>
           </div>
 
           <form className="space-y-6" onSubmit={handleSubmit}>
@@ -168,18 +228,6 @@ export function SignupForm() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
-              <label className="flex cursor-pointer items-center justify-between gap-4 text-sm text-slate-200">
-                <span>Create account as admin</span>
-                <input
-                  type="checkbox"
-                  checked={isAdminAccount}
-                  onChange={(event) => setIsAdminAccount(event.target.checked)}
-                  className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-teal-400 focus:ring-teal-500"
-                />
-              </label>
-            </div>
-
             {isAdminAccount && (
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">Admin access code</label>
@@ -193,6 +241,7 @@ export function SignupForm() {
                 <p className="mt-2 text-xs text-slate-500">This code is required to create an admin account.</p>
               </div>
             )}
+
             <div className="grid gap-6 sm:grid-cols-2">
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-300">Email address</label>
@@ -200,7 +249,7 @@ export function SignupForm() {
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
+                  placeholder={mode === "user" ? "you@example.com" : "admin@fixmyroad.local"}
                   disabled={isLoading}
                 />
                 <p className="mt-2 text-xs text-slate-500">We&apos;ll send a verification link to this email</p>
@@ -234,14 +283,14 @@ export function SignupForm() {
             {error ? <p className="text-sm text-rose-300">{error}</p> : null}
 
             <Button type="submit" className="w-full" disabled={isLoading || !validation.completed}>
-              {isLoading ? "Creating account..." : "Create account"}
+              {isLoading ? "Creating account..." : mode === "user" ? "Create User Account" : "Create Admin Account"}
             </Button>
           </form>
 
           <p className="text-center text-sm text-slate-400">
             Already have an account?{' '}
-            <Link href="/login" className="font-semibold text-teal-300 hover:text-teal-200">
-              Sign in
+            <Link href={mode === "user" ? "/login" : "/login?role=admin"} className="font-semibold text-teal-300 hover:text-teal-200">
+              {mode === "user" ? "Sign in as User" : "Sign in as Admin"}
             </Link>
           </p>
         </Card>
