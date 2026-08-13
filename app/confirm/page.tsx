@@ -46,12 +46,37 @@ export default function ConfirmPage() {
         }
 
         if (data.session.user.email_confirmed_at) {
-          // Create profile with data from user metadata or session
           const fullName = data.session.user.user_metadata?.full_name || "User";
           const role = data.session.user.user_metadata?.role || "citizen";
           const phone = data.session.user.user_metadata?.phone || null;
-          await createUserProfile(data.session.user.id, fullName, role, phone);
-          
+          const storedSignup = typeof window !== "undefined"
+            ? JSON.parse(window.localStorage.getItem("fixmyroad_pending_signup") || "null")
+            : null;
+
+          if (storedSignup) {
+            const response = await fetch("/api/auth/finalize-signup", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: data.session.user.id,
+                full_name: storedSignup.full_name || fullName,
+                email: storedSignup.email || data.session.user.email,
+                phone: storedSignup.phone || phone,
+                password: storedSignup.password,
+                role: storedSignup.role || role
+              })
+            });
+
+            const finalizeResult = await response.json();
+            if (!response.ok || !finalizeResult.success) {
+              throw new Error(finalizeResult.error || "Unable to finalize signup after email confirmation.");
+            }
+
+            if (typeof window !== "undefined") {
+              window.localStorage.removeItem("fixmyroad_pending_signup");
+            }
+          }
+
           setStatus("success");
           setMessage("Email verified successfully! Redirecting to identity verification...");
           setTimeout(() => {

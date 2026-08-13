@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { supabase } from "../../../../lib/supabaseClient";
 
 export async function POST(request: Request) {
   try {
@@ -17,13 +16,21 @@ export async function POST(request: Request) {
     const adminCode = process.env.ADMIN_CODE;
 
     if (!adminCode) {
+      console.error("ADMIN_CODE environment variable not configured");
       return NextResponse.json(
         { success: false, error: "Admin system not configured." },
         { status: 500 }
       );
     }
+
+    const codeMatch = code.trim() === adminCode.trim();
+    console.log("Admin code verification:", { 
+      providedLength: code.trim().length,
+      expectedLength: adminCode.trim().length,
+      match: codeMatch
+    });
     
-    if (code.trim() !== adminCode.trim()) {
+    if (!codeMatch) {
       return NextResponse.json(
         { success: false, error: "Invalid admin access code." },
         { status: 401 }

@@ -236,26 +236,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const normalizedEmail = email.trim().toLowerCase();
-    const result = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password
+
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: normalizedEmail, password })
     });
 
-    if (result.error || !result.data?.user) {
-      return { success: false, error: result.error?.message ?? "Unable to sign in." };
+    const data = await response.json();
+
+    if (!response.ok || !data?.success || !data?.user) {
+      return { success: false, error: data?.error ?? "Unable to sign in." };
     }
 
-    const profileResult = await loadProfile(result.data.user.id, result.data.user.email ?? normalizedEmail);
-    if (!profileResult.success || !profileResult.user) {
-      await supabase.auth.signOut();
-      return { success: false, error: profileResult.error ?? "Profile not found." };
-    }
-
-    setUser(profileResult.user);
+    const profileUser = data.user as AuthUser;
+    setUser(profileUser);
     return {
       success: true,
-      needsVerification: !profileResult.user.verified,
-      user: profileResult.user
+      needsVerification: !profileUser.verified,
+      user: profileUser
     };
   };
 
@@ -325,64 +324,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const signUpResult = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: {
-        emailRedirectTo: process.env.NEXT_PUBLIC_APP_URL ? `${process.env.NEXT_PUBLIC_APP_URL}/verify` : undefined,
-        data: {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(
+        "fixmyroad_pending_signup",
+        JSON.stringify({
           full_name: full_name.trim(),
-          role: isAdmin ? "admin" : "citizen",
-          phone: phone.trim() || null
-        }
+          email: normalizedEmail,
+          phone: phone.trim(),
+          password,
+          role: isAdmin ? "admin" : "citizen"
+        })
+      );
+    }
+
+    const signupResponse = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        full_name: full_name.trim(),
+        email: normalizedEmail,
+        phone: phone.trim(),
+        password,
+        role: isAdmin ? "admin" : "citizen"
+      })
+    });
+
+    const signupData = await signupResponse.json();
+
+    if (!signupResponse.ok || !signupData?.success || !signupData?.user) {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem("fixmyroad_pending_signup");
       }
-    });
-
-    if (signUpResult.error || !signUpResult.data?.user) {
-      return { success: false, error: signUpResult.error?.message ?? "Unable to create account." };
+      return { success: false, error: signupData?.error ?? "Unable to create account." };
     }
 
-    if (!signUpResult.data.user.email_confirmed_at) {
-      setUser(null);
-      return {
-        success: true,
-        needsEmailVerification: true,
-        message: "Account created! Please verify your email to complete signup. Check your inbox for verification link."
-      };
-    }
-
-    const profileResult = await createCitizenProfile({
-      id: signUpResult.data.user.id,
-      full_name: full_name.trim(),
-      phone: phone.trim() || null,
-      avatar_url: `https://avatars.dicebear.com/api/identicon/${encodeURIComponent(full_name.trim())}.svg`,
-      role: isAdmin ? "admin" : "citizen"
-    });
-
-    if (profileResult.error || !profileResult.data) {
-      await supabase.auth.signOut();
-      return { success: false, error: profileResult.error?.message ?? "Unable to create profile." };
-    }
-
-    setUser(buildAuthUser(profileResult.data, normalizedEmail));
-    return { success: true };
+    const nextUser = signupData.user as AuthUser;
+    setUser(nextUser);
+    return {
+      success: true,
+      needsEmailVerification: true,
+      message: signupData.message ?? "Please verify your email to complete signup."
+    };
   };
 
+  // Legacy mock identity verification is intentionally disabled.
+  // Email verification is the only required verification step before inserting user data.
   const verifyIdentity = async (otp: string) => {
     if (!user) {
       return { success: false, error: "No active user session found." };
     }
-    if (otp.trim() !== "123456") {
-      return { success: false, error: "The verification code is invalid. Use 123456 for the mock flow." };
-    }
-
-    const result = await updateIdentityVerification(user.id);
-    if (result.error || !result.data) {
-      return { success: false, error: result.error?.message ?? "Unable to verify identity." };
-    }
-
-    setUser(buildAuthUser(result.data, user.email));
-    return { success: true };
+    return { success: false, error: "Email verification is required before profile creation. This legacy identity check is disabled." };
   };
 
   const logout = async () => {
