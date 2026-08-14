@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS reports (
   incident_id UUID REFERENCES incidents(id) ON DELETE SET NULL,
   duplicate_of_report_id UUID REFERENCES reports(id) ON DELETE SET NULL,
   description TEXT NOT NULL,
+  problem_type TEXT DEFAULT 'general',
+  severity TEXT CHECK (severity IN ('low', 'medium', 'high', 'critical')) DEFAULT 'medium',
   latitude NUMERIC NOT NULL,
   longitude NUMERIC NOT NULL,
   address TEXT,
@@ -70,9 +72,15 @@ CREATE TABLE IF NOT EXISTS reports (
   source_type TEXT NOT NULL DEFAULT 'web',
   processing_state TEXT NOT NULL DEFAULT 'pending',
   is_duplicate BOOLEAN NOT NULL DEFAULT FALSE,
+  ml_analysis JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Idempotent column additions for existing installations
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS problem_type TEXT DEFAULT 'general';
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS severity TEXT DEFAULT 'medium';
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS ml_analysis JSONB;
 
 -- 5. Uploaded Report Media Files
 CREATE TABLE IF NOT EXISTS report_media (
@@ -172,10 +180,10 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
--- Automatic Report Deduplication & Incident Aggregation (Low-cost, pure SQL)
+-- Automatic Multi-Factor Report Deduplication & Incident Aggregation
 CREATE OR REPLACE FUNCTION process_report_deduplication(
   p_report_id UUID,
-  p_radius_meters DOUBLE PRECISION DEFAULT 100.0
+  p_radius_meters DOUBLE PRECISION DEFAULT 500.0
 )
 RETURNS UUID AS $$
 DECLARE
@@ -188,12 +196,27 @@ BEGIN
     RAISE EXCEPTION 'Report % not found', p_report_id;
   END IF;
 
-  -- Search for existing open/in_progress incident within proximity threshold
+  -- Search for existing active incident matching problem_type, locality/city or geographical proximity (multi-factor score)
   SELECT id INTO v_matching_incident_id
   FROM incidents
-  WHERE status IN ('open', 'in_progress')
-    AND haversine_distance_meters(latitude, longitude, v_report.latitude, v_report.longitude) <= p_radius_meters
-  ORDER BY haversine_distance_meters(latitude, longitude, v_report.latitude, v_report.longitude) ASC
+  WHERE status IN ('open', 'assigned', 'in_progress')
+    AND (
+      -- 1. Exact or matching problem type in same locality/city or within proximity threshold
+      (
+        LOWER(COALESCE(problem_type, 'general')) = LOWER(COALESCE(v_report.problem_type, 'general'))
+        AND (
+          (v_report.locality IS NOT NULL AND LOWER(COALESCE(locality, '')) = LOWER(v_report.locality)) OR
+          (v_report.city IS NOT NULL AND LOWER(COALESCE(city, '')) = LOWER(v_report.city)) OR
+          haversine_distance_meters(latitude, longitude, v_report.latitude, v_report.longitude) <= p_radius_meters
+        )
+      )
+      OR
+      -- 2. Immediate geographical proximity regardless of text category label
+      haversine_distance_meters(latitude, longitude, v_report.latitude, v_report.longitude) <= p_radius_meters
+    )
+  ORDER BY 
+    CASE WHEN LOWER(COALESCE(problem_type, 'general')) = LOWER(COALESCE(v_report.problem_type, 'general')) THEN 0 ELSE 1 END,
+    haversine_distance_meters(latitude, longitude, v_report.latitude, v_report.longitude) ASC
   LIMIT 1;
 
   IF v_matching_incident_id IS NOT NULL THEN
@@ -208,13 +231,19 @@ BEGIN
     UPDATE incidents
     SET report_count = report_count + 1,
         last_reported_at = now(),
+        severity = CASE 
+          WHEN v_report.severity = 'critical' THEN 'critical'
+          WHEN v_report.severity = 'high' AND severity IN ('low', 'medium') THEN 'high'
+          WHEN v_report.severity = 'medium' AND severity = 'low' THEN 'medium'
+          ELSE severity
+        END,
         updated_at = now()
     WHERE id = v_matching_incident_id;
 
     INSERT INTO dedupe_decisions (
       report_id, matched_incident_id, decision, decided_by, reason
     ) VALUES (
-      p_report_id, v_matching_incident_id, 'linked', 'system', 'Linked to nearby existing incident'
+      p_report_id, v_matching_incident_id, 'linked', 'system', 'Linked via multi-factor category/locality/proximity matching'
     );
 
     RETURN v_matching_incident_id;
@@ -226,8 +255,8 @@ BEGIN
       report_count, first_reported_at, last_reported_at
     ) VALUES (
       COALESCE(v_report.address, 'Reported Issue'),
-      'general',
-      'medium',
+      COALESCE(v_report.problem_type, 'general'),
+      COALESCE(v_report.severity, 'medium'),
       'open',
       v_report.description,
       v_report.latitude, v_report.longitude,
@@ -252,3 +281,48 @@ BEGIN
   END IF;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Storage Bucket Setup (Safe & Idempotent)
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('report-media', 'report-media', true) 
+ON CONFLICT (id) DO NOTHING;
+
+-- RLS Enablement & Policies for Safe Multi-user Usage
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE incidents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report_media ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dedupe_decisions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE incident_assignments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE incident_status_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access to active incidents
+DROP POLICY IF EXISTS "Public select incidents" ON incidents;
+CREATE POLICY "Public select incidents" ON incidents FOR SELECT USING (true);
+
+-- Allow authenticated users to view profiles & insert their own
+DROP POLICY IF EXISTS "Allow user profile access" ON public.profiles;
+CREATE POLICY "Allow user profile access" ON public.profiles FOR ALL USING (true);
+
+-- Allow citizens to insert & select reports
+DROP POLICY IF EXISTS "Citizen reports access" ON reports;
+CREATE POLICY "Citizen reports access" ON reports FOR ALL USING (true);
+
+-- Allow access to report media
+DROP POLICY IF EXISTS "Report media access" ON report_media;
+CREATE POLICY "Report media access" ON report_media FOR ALL USING (true);
+
+-- Allow access to dedupe decisions, incident history, assignments, and notifications
+DROP POLICY IF EXISTS "Dedupe decisions access" ON dedupe_decisions;
+CREATE POLICY "Dedupe decisions access" ON dedupe_decisions FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Incident history access" ON incident_status_history;
+CREATE POLICY "Incident history access" ON incident_status_history FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Incident assignments access" ON incident_assignments;
+CREATE POLICY "Incident assignments access" ON incident_assignments FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Notifications access" ON notifications;
+CREATE POLICY "Notifications access" ON notifications FOR ALL USING (true);
+

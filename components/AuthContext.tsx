@@ -61,7 +61,8 @@ type AuthContextValue = {
     description: string;
     mediaFiles: File[];
     location: LocationPayload;
-  }) => Promise<{ success: boolean; error?: string }>;
+    problemType?: string;
+  }) => Promise<{ success: boolean; error?: string; dedupeDecision?: "new" | "linked" }>;
   updateReportStatus: (reportId: string, status: Report["status"]) => void;
   allReports: Report[];
   notifications: AppNotification[];
@@ -200,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
 
       const sessionUser = session?.user;
-      
+
       // If no session, clear user
       if (!sessionUser?.id) {
         setUser(null);
@@ -460,7 +461,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await logout();
   };
 
-  const saveReport = async ({ title, description, mediaFiles, location }: { title: string; description: string; mediaFiles: File[]; location: LocationPayload }) => {
+  const saveReport = async ({ title, description, mediaFiles, location, problemType }: { title: string; description: string; mediaFiles: File[]; location: LocationPayload; problemType?: string }) => {
     if (!user) {
       return { success: false, error: "Sign in before submitting a report." };
     }
@@ -468,10 +469,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Complete identity verification before submitting reports." };
     }
 
-    submitReportToSupabase({
+    const supaResult = await submitReportToSupabase({
       userId: user.id,
       title,
       description: description.trim(),
+      problemType,
       latitude: 28.6139 + Math.random() * 0.01,
       longitude: 77.2090 + Math.random() * 0.01,
       address: location.address,
@@ -479,7 +481,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       city: location.city,
       pincode: location.pincode,
       mediaFiles
-    }).catch((err) => console.warn("Supabase background save fallback:", err));
+    }).catch((err) => {
+      console.warn("Supabase background save fallback:", err);
+      return null;
+    });
 
     const id = `R${Date.now()}`;
     const thumbnailEntries = await createMediaItems(mediaFiles, id);
@@ -538,7 +543,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveReports(nextReports);
     saveNotifications(nextNotifications);
 
-    return { success: true };
+    const dedupeDecision: "linked" | "new" = supaResult && "incidentId" in supaResult && supaResult.incidentId ? "linked" : "new";
+
+    return {
+      success: true,
+      dedupeDecision
+    };
   };
 
   const updateReportStatus = (reportId: string, status: Report["status"]) => {

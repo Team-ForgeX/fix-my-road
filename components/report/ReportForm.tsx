@@ -23,10 +23,12 @@ export function ReportForm() {
   const { saveReport } = useAuth();
   const [description, setDescription] = useState("");
   const [title, setTitle] = useState("");
+  const [problemType, setProblemType] = useState("pothole");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [location, setLocation] = useState(initialLocation);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [dedupeMessage, setDedupeMessage] = useState<string | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -46,7 +48,7 @@ export function ReportForm() {
     if (validationErrors.length > 0) return;
 
     setSubmitting(true);
-    const result = await saveReport({ title, description, mediaFiles, location });
+    const result = await saveReport({ title, description, mediaFiles, location, problemType });
     setSubmitting(false);
 
     if (!result.success) {
@@ -54,6 +56,11 @@ export function ReportForm() {
       return;
     }
 
+    setDedupeMessage(
+      result.dedupeDecision === "linked"
+        ? "Your report matched and was linked to an existing nearby incident (report count incremented)."
+        : "A new incident was registered from your report."
+    );
     setSubmitted(true);
   };
 
@@ -66,11 +73,13 @@ export function ReportForm() {
           <CheckCircle2 className="h-8 w-8" />
         </div>
         <div>
-          <h2 className="text-2xl font-semibold text-white">Report submitted</h2>
-          <p className="mt-2 text-slate-400">Thank you! Your report has been queued for verification and incident matching.</p>
+          <h2 className="text-2xl font-semibold text-white">Report submitted successfully</h2>
+          <p className="mt-2 text-slate-400">
+            {dedupeMessage ?? "Thank you! Your report has been stored in the database and processed."}
+          </p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <Button onClick={() => setSubmitted(false)}>Submit another report</Button>
+          <Button onClick={() => { setSubmitted(false); setDedupeMessage(null); }}>Submit another report</Button>
           <Link href="/reports" className="inline-flex">
             <Button variant="secondary">View my reports</Button>
           </Link>
@@ -83,10 +92,30 @@ export function ReportForm() {
     <form onSubmit={handleSubmit} className="space-y-8">
       <Card className="space-y-6">
         <div>
-          <p className="text-lg font-semibold text-white">Problem description</p>
-          <p className="text-sm text-slate-400">Describe what you observed and why it is a concern.</p>
+          <p className="text-lg font-semibold text-white">Problem details</p>
+          <p className="text-sm text-slate-400">Select category and describe what you observed.</p>
         </div>
         <div className="grid gap-6">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300" htmlFor="report-category">
+              Issue Category
+            </label>
+            <select
+              id="report-category"
+              value={problemType}
+              onChange={(event) => setProblemType(event.target.value)}
+              className="w-full rounded-full border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-white focus:border-teal-400 focus:outline-none"
+            >
+              <option value="pothole">Pothole / Road Surface Defect</option>
+              <option value="water_leak">Water Leakage / Broken Pipe</option>
+              <option value="streetlight">Streetlight Outage</option>
+              <option value="garbage">Garbage Accumulation</option>
+              <option value="drainage">Blocked Drain / Sewage</option>
+              <option value="traffic">Traffic Signal / Signage Defect</option>
+              <option value="general">Other Infrastructure Issue</option>
+            </select>
+          </div>
+
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-300" htmlFor="report-title">
               Short title (optional)
@@ -95,9 +124,10 @@ export function ReportForm() {
               id="report-title"
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              placeholder="Example: Garbage accumulation at Oak Street"
+              placeholder="Example: Large pothole near main crossroad"
             />
           </div>
+
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-300" htmlFor="report-description">
               Issue description
@@ -106,7 +136,7 @@ export function ReportForm() {
               id="report-description"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
-              placeholder="Describe the issue, where it is located, and anything else that may help identify it..."
+              placeholder="Describe the issue, exact street details, and anything that helps municipal teams respond..."
             />
           </div>
         </div>

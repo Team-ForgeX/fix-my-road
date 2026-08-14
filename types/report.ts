@@ -10,6 +10,8 @@ export type ReportMedia = {
   created_at: string;
 };
 
+import type { MLAnalysisResult } from "../lib/ml/types";
+
 export type ReportStatus = "open" | "in_progress" | "resolved" | "duplicate";
 
 export type Report = {
@@ -30,5 +32,6 @@ export type Report = {
   severity?: "low" | "medium" | "high";
   report_count?: number;
   is_duplicate?: boolean;
+  ml_analysis?: MLAnalysisResult;
   media: ReportMedia[];
 };

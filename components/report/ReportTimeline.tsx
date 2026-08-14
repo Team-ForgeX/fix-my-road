@@ -11,10 +11,13 @@ const steps = [
 
 const activeIndexMap: Record<string, number> = {
   submitted: 0,
+  pending: 0,
+  processed: 2,
   incident_matched: 2,
   assigned: 3,
   in_progress: 4,
-  resolved: 5
+  resolved: 5,
+  linked: 2
 };
 
 export function ReportTimeline({ status }: { status: string }) {

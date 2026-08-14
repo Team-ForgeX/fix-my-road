@@ -96,10 +96,11 @@ export default function ReportDetailsPage() {
               <div className="rounded-3xl border border-slate-800/80 bg-slate-950/80 p-6">
                 <p className="text-sm uppercase tracking-[0.28em] text-slate-500">ML insights</p>
                 <div className="mt-4 space-y-3 text-sm text-slate-300">
-                  <p>Detected problem type: Garbage accumulation</p>
-                  <p>Severity: {report.severity ?? "medium"}</p>
-                  <p>Confidence: 86%</p>
+                  <p>Detected problem type: {report.ml_analysis?.problem_type ?? "Pending analysis"}</p>
+                  <p>Severity: {report.ml_analysis?.severity ?? report.severity ?? "medium"}</p>
+                  <p>Confidence: {report.ml_analysis ? `${Math.round(report.ml_analysis.confidence * 100)}%` : "—"}</p>
                   <p>Linked incident: {report.incident_id ?? "None"}</p>
+                  <p>Duplicate match: {report.is_duplicate ? "Yes (linked to nearby incident)" : "No (new incident)"}</p>
                   <p>Other users reporting same incident: {report.report_count ?? 1}</p>
                 </div>
               </div>
