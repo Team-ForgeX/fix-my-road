@@ -39,8 +39,8 @@ export function Navbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0b0b0d]/80 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
+    <header className="sticky top-4 z-50 mx-auto max-w-[calc(100%-2rem)] md:max-w-7xl animate-fade-in-up">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-full border border-white/10 bg-slate-900/60 px-6 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-xl">
         <Link href="/" className="flex items-center gap-3 font-semibold text-white transition hover:text-red-200">
           <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-red-500 to-violet-500 text-sm font-black shadow-glow">
             F

@@ -1,8 +1,7 @@
 "use client";
 
-"use client";
-
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Input } from "../ui/Input";
 import { Textarea } from "../ui/Textarea";
 import { Button } from "../ui/Button";
@@ -72,9 +71,9 @@ export function ReportForm() {
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
           <Button onClick={() => setSubmitted(false)}>Submit another report</Button>
-          <a href="/reports" className="inline-flex">
+          <Link href="/reports" className="inline-flex">
             <Button variant="secondary">View my reports</Button>
-          </a>
+          </Link>
         </div>
       </Card>
     );

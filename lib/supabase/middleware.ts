@@ -43,14 +43,16 @@ export async function updateSession(request: NextRequest) {
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
   const isGuestOnlyRoute = pathname === "/login" || pathname === "/signup";
 
+  const { data: profile } = user
+    ? await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle()
+    : { data: null };
+
   if (isGuestOnlyRoute && user && user.email_confirmed_at) {
     const url = request.nextUrl.clone();
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-
     url.pathname = profile?.role === "admin" ? "/admin" : "/dashboard";
     return NextResponse.redirect(url);
   }
@@ -68,18 +70,16 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (isAdminRoute) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
+    if (isAdminRoute && profile?.role !== "admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
 
-      if (!profile || profile.role !== "admin") {
-        const url = request.nextUrl.clone();
-        url.pathname = "/dashboard";
-        return NextResponse.redirect(url);
-      }
+    if (!isAdminRoute && profile?.role === "admin") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/admin";
+      return NextResponse.redirect(url);
     }
   }
 

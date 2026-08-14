@@ -50,7 +50,8 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
-      <body className="min-h-screen bg-[#09090b] text-white antialiased">
+      <body className="relative min-h-screen bg-slate-950 text-white antialiased selection:bg-violet-500/30">
+        <div className="fixed inset-0 -z-10 h-full w-full bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))]"></div>
         <AuthProvider>
           {children}
           <Footer />

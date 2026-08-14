@@ -22,12 +22,12 @@ export function LoginForm() {
     if (!ready || !user) return;
 
     if (!user.verified) {
-      router.replace("/verify");
+      window.location.href = "/verify";
       return;
     }
 
-    router.replace(user.role === "admin" ? "/admin" : "/dashboard");
-  }, [ready, router, user]);
+    window.location.href = user.role === "admin" ? "/admin" : "/dashboard";
+  }, [ready, user]);
 
   if (!ready) {
     return (
@@ -72,9 +72,9 @@ export function LoginForm() {
 
       if (result.user) {
         if (!result.user.verified) {
-          router.replace("/verify");
+          window.location.href = "/verify";
         } else {
-          router.replace(result.user.role === "admin" ? "/admin" : "/dashboard");
+          window.location.href = result.user.role === "admin" ? "/admin" : "/dashboard";
         }
       }
     } catch (err) {
@@ -82,6 +82,7 @@ export function LoginForm() {
       setIsLoading(false);
     }
   };
+
 
 
   return (

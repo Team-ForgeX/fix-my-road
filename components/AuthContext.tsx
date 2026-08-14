@@ -47,11 +47,13 @@ type AuthContextValue = {
     email: string;
     phone: string;
     password: string;
+    admin_code?: string;
   }) => Promise<{ success: boolean; error?: string; needsEmailVerification?: boolean; message?: string }>;
   verifyIdentity: (otp: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   adminLogin: (email: string, password: string, adminCode: string) => Promise<{ success: boolean; error?: string }>;
   elevateToAdmin: (adminCode: string) => Promise<{ success: boolean; error?: string }>;
+  demoteToClient: () => Promise<{ success: boolean; error?: string }>;
   adminLogout: () => Promise<void>;
   reports: Report[];
   saveReport: (payload: {
@@ -143,29 +145,32 @@ const resolveRole = (role?: string | null, fallback: "client" | "admin" = "clien
   return fallback;
 };
 
+const combineRoles = (...roles: Array<string | null | undefined>) => {
+  return roles.some((role) => resolveRole(role, "client") === "admin") ? "admin" : "client";
+};
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-function buildAuthUser(profile: UserProfile, email: string, emailConfirmed: boolean): AuthUser {
+function buildAuthUser(profile: UserProfile, email: string, emailConfirmed: boolean, preferredRole: "client" | "admin" = "client"): AuthUser {
   return {
     ...profile,
-    role: resolveRole(profile.role, "client"),
+    role: combineRoles(profile.role, preferredRole),
     email,
     verified: emailConfirmed
   };
 }
 
-async function loadProfile(userId: string, email: string, emailConfirmed: boolean) {
+async function loadProfile(userId: string, email: string, emailConfirmed: boolean, preferredRole: "client" | "admin" = "client") {
   const profileResult = await fetchUserProfile(userId);
   if (profileResult.data) {
-    return { success: true, user: buildAuthUser(profileResult.data, email, emailConfirmed) };
+    return { success: true, user: buildAuthUser(profileResult.data, email, emailConfirmed, preferredRole) };
   }
 
-  // Profile missing - auto create fallback citizen profile
   const fallbackName = email ? email.split("@")[0] : "User";
   const { data: newProfile, error: createError } = await createCitizenProfile({
     id: userId,
     full_name: fallbackName,
-    role: "client"
+    role: preferredRole
   });
 
   if (!createError && newProfile) {
@@ -185,84 +190,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    let isInitializing = true;
 
-    const syncSession = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (!mounted) return;
-      if (error) {
-        console.warn("Supabase session error:", error.message);
-        setUser(null);
-        setReady(true);
-        return;
-      }
-
-        const sessionUser = data?.session?.user;
-      if (!sessionUser?.id) {
-        setUser(null);
-        setReady(true);
-        return;
-      }
-
-      const isConfirmed = Boolean(sessionUser.email_confirmed_at);
-      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "", isConfirmed);
-      if (!mounted) return;
-      if (!profileResult.success || !profileResult.user) {
-        console.warn(profileResult.error);
-        setUser({
-          id: sessionUser.id,
-          full_name: sessionUser.user_metadata?.full_name || "User",
-          phone: sessionUser.user_metadata?.phone || null,
-          role: resolveRole(sessionUser.user_metadata?.role, "client"),
-          email: sessionUser.email ?? "",
-          verified: isConfirmed,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-      } else {
-        setUser({
-          ...profileResult.user,
-          role: resolveRole(profileResult.user.role, "client")
-        });
-      }
-      setReady(true);
-    };
-
-    syncSession();
     setReports(initialReports());
     setNotifications(initialNotifications());
 
-    const subscription = supabase.auth.onAuthStateChange(async (_, session) => {
+    // Set up auth state listener
+    const subscription = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
+
       const sessionUser = session?.user;
+      
+      // If no session, clear user
       if (!sessionUser?.id) {
         setUser(null);
-        setReady(true);
+        if (isInitializing) {
+          setReady(true);
+          isInitializing = false;
+        }
         return;
       }
+
+      // User has session, load profile and set user
       const isConfirmed = Boolean(sessionUser.email_confirmed_at);
-      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "", isConfirmed);
+      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "", isConfirmed, "client");
 
       if (!mounted) return;
-      if (!profileResult.success || !profileResult.user) {
-        console.warn(profileResult.error);
+
+      if (profileResult.success && profileResult.user) {
+        // Use role directly from database - it's the source of truth
+        setUser({
+          ...profileResult.user,
+          role: profileResult.user.role === "admin" ? "admin" : "client"
+        });
+      } else {
+        // Fallback if profile loading fails
+        console.warn("Profile load failed:", profileResult.error);
         setUser({
           id: sessionUser.id,
-          full_name: sessionUser.user_metadata?.full_name || "User",
+          full_name: sessionUser.user_metadata?.full_name || sessionUser.email?.split("@")[0] || "User",
           phone: sessionUser.user_metadata?.phone || null,
-          role: resolveRole(sessionUser.user_metadata?.role, "client"),
+          role: "client",
           email: sessionUser.email ?? "",
           verified: isConfirmed,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         });
-      } else {
-        setUser({
-          ...profileResult.user,
-          role: resolveRole(profileResult.user.role, "client")
-        });
       }
-      setReady(true);
+
+      if (isInitializing) {
+        setReady(true);
+        isInitializing = false;
+      }
     });
+
+    // Check session on mount
+    const checkInitialSession = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          console.warn("Initial session check error:", error.message);
+        }
+        // onAuthStateChange will handle setting user from the session
+      } catch (err) {
+        console.warn("Session check failed:", err instanceof Error ? err.message : String(err));
+      }
+    };
+
+    checkInitialSession();
 
     return () => {
       mounted = false;
@@ -281,53 +276,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
-    const normalizedEmail = email.trim().toLowerCase();
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password
-    });
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password
+      });
 
-    if (authError || !authData?.user) {
-      return { success: false, error: authError?.message ?? "Unable to sign in." };
-    }
+      if (authError || !authData?.user) {
+        return { success: false, error: authError?.message ?? "Unable to sign in." };
+      }
 
-    const isConfirmed = Boolean(authData.user.email_confirmed_at);
-    const metadataRole = authData.user.user_metadata?.role === "admin" ? "admin" : "client";
-    const profileResult = await loadProfile(authData.user.id, authData.user.email ?? "", isConfirmed);
+      const isConfirmed = Boolean(authData.user.email_confirmed_at);
+      const profileResult = await loadProfile(authData.user.id, authData.user.email ?? "", isConfirmed, "client");
 
-    if (!profileResult.success || !profileResult.user) {
-      const fallbackUser: AuthUser = {
-        id: authData.user.id,
-        full_name: authData.user.user_metadata?.full_name || normalizedEmail.split("@")[0] || "User",
-        phone: authData.user.user_metadata?.phone || null,
-        role: resolveRole(metadataRole, "client"),
-        email: authData.user.email ?? normalizedEmail,
-        verified: isConfirmed,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+      if (!profileResult.success || !profileResult.user) {
+        const fallbackUser: AuthUser = {
+          id: authData.user.id,
+          full_name: authData.user.user_metadata?.full_name || normalizedEmail.split("@")[0] || "User",
+          phone: authData.user.user_metadata?.phone || null,
+          role: "client",
+          email: authData.user.email ?? normalizedEmail,
+          verified: isConfirmed,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        setUser(fallbackUser);
+        return {
+          success: true,
+          needsVerification: !fallbackUser.verified,
+          user: fallbackUser
+        };
+      }
+
+      // Use role directly from database
+      const resolvedUser: AuthUser = {
+        ...profileResult.user,
+        role: profileResult.user.role === "admin" ? "admin" : "client"
       };
-      setUser(fallbackUser);
-      setReady(true);
+
+      setUser(resolvedUser);
       return {
         success: true,
-        needsVerification: !fallbackUser.verified,
-        user: fallbackUser
+        needsVerification: !resolvedUser.verified,
+        user: resolvedUser
       };
+    } catch (err) {
+      console.error("Login error:", err instanceof Error ? err.message : String(err));
+      return { success: false, error: "An unexpected error occurred during login." };
     }
-
-    const resolvedUser: AuthUser = {
-      ...profileResult.user,
-      role: resolveRole(profileResult.user.role, resolveRole(metadataRole, "client"))
-    };
-
-    setUser(resolvedUser);
-    setReady(true);
-    return {
-      success: true,
-      needsVerification: !resolvedUser.verified,
-      user: resolvedUser
-    };
   };
 
   const elevateUserToAdmin = async (adminCode: string) => {
@@ -346,11 +344,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: data.error ?? "Unable to verify admin code." };
     }
 
+    // After elevation, reload profile from database
     const { data: { user: sessionUser } } = await supabase.auth.getUser();
     if (sessionUser) {
-      const refreshed = await loadProfile(sessionUser.id, sessionUser.email ?? "", Boolean(sessionUser.email_confirmed_at));
+      const refreshed = await loadProfile(sessionUser.id, sessionUser.email ?? "", Boolean(sessionUser.email_confirmed_at), "client");
       if (refreshed.success && refreshed.user) {
-        setUser(refreshed.user);
+        // Set role directly from database after elevation
+        setUser({
+          ...refreshed.user,
+          role: refreshed.user.role === "admin" ? "admin" : "client"
+        });
       }
     }
 
@@ -361,16 +364,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return elevateUserToAdmin(adminCode);
   };
 
+  const demoteToClient = async () => {
+    if (!user) {
+      return { success: false, error: "Sign in to change your account type." };
+    }
+
+    const response = await fetch("/api/admin/elevate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "downgrade" })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      return { success: false, error: data.error ?? "Unable to switch account back to client." };
+    }
+
+    setUser((currentUser) => currentUser ? { ...currentUser, role: "client" } : currentUser);
+    return { success: true };
+  };
+
   const signup = async ({
     full_name,
     email,
     phone,
-    password
+    password,
+    admin_code
   }: {
     full_name: string;
     email: string;
     phone: string;
     password: string;
+    admin_code?: string;
   }) => {
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -382,7 +407,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: normalizedEmail,
         phone: phone.trim(),
         password,
-        role: "client"
+        admin_code: admin_code?.trim()
       })
     });
 
@@ -410,32 +435,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    // Clear local state immediately
     setUser(null);
-    setReady(false);
+    setReports([]);
+    setNotifications([]);
+    setReady(true);
 
     try {
       const { error } = await supabase.auth.signOut({ scope: "global" });
       if (error) {
         console.warn("Sign out error:", error.message);
       }
-    } finally {
-      setUser(null);
-      setReady(true);
+    } catch (err) {
+      console.warn("Logout error:", err instanceof Error ? err.message : String(err));
     }
   };
 
   const adminLogin = async (email: string, password: string, _adminCode?: string) => {
-    const result = await login(email, password);
-    if (!result.success) {
-      return result;
-    }
-
-    if (!result.user || result.user.role !== "admin") {
-      await logout();
-      return { success: false, error: "This account is not configured as an admin." };
-    }
-
-    return { success: true, user: result.user };
+    // Admin login is the same as regular login - role is auto-detected from database
+    return login(email, password);
   };
 
   const adminLogout = async () => {
@@ -513,9 +531,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const nextReports = [report, ...reports];
     const nextNotifications = [clientNotification, adminNotification, ...notifications];
 
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem("fixmyroad_report_location");
+    }
+
     saveReports(nextReports);
     saveNotifications(nextNotifications);
-    
+
     return { success: true };
   };
 
@@ -600,6 +622,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     adminLogin,
     elevateToAdmin,
+    demoteToClient,
     adminLogout,
     reports,
     saveReport,

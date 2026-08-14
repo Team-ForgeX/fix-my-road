@@ -45,9 +45,9 @@ const stats = [
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-[#09090b] text-white">
+    <div className="min-h-screen text-white">
       <Navbar />
-      <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
+      <main className="mx-auto max-w-7xl px-6 pt-16 pb-10 lg:px-8">
         <section className="grid gap-10 lg:grid-cols-[1.6fr_1fr] lg:items-center">
           <div className="space-y-7">
             <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-4 py-2 text-sm text-violet-100 shadow-glow">
@@ -55,8 +55,8 @@ export default function HomePage() {
               Civic-tech designed for faster action
             </div>
 
-            <div className="space-y-4">
-              <h1 className="max-w-3xl text-4xl font-black tracking-tight text-white sm:text-5xl lg:text-6xl">
+            <div className="space-y-4 animate-fade-in-up">
+              <h1 className="max-w-3xl text-4xl font-black tracking-tight sm:text-5xl lg:text-6xl text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-white/70">
                 Report road problems before they become bigger ones.
               </h1>
               <p className="max-w-2xl text-lg leading-8 text-white/70">
@@ -74,9 +74,9 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/10 bg-[#101014]/80 p-6 shadow-soft backdrop-blur-xl">
+          <div className="rounded-[2rem] border border-white/[0.08] bg-white/[0.03] p-6 shadow-[0_8px_40px_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-500 hover:border-white/[0.15] hover:shadow-[0_8px_60px_rgba(139,92,246,0.12)]">
             <div className="space-y-5">
-              <div className="rounded-[1.5rem] bg-[#0b0b0d] p-6 ring-1 ring-white/10">
+              <div className="rounded-[1.5rem] bg-slate-900/60 p-6 ring-1 ring-white/[0.08] backdrop-blur-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.35em] text-white/50">How it works</p>
                 <div className="mt-6 space-y-4">
                   {[
@@ -99,16 +99,16 @@ export default function HomePage() {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 {issueTypes.map((item) => (
-                  <div key={item} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-sm font-medium text-white">{item}</p>
+                  <div key={item} className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/30 hover:bg-white/[0.06]">
+                    <p className="text-sm font-medium text-white/90">{item}</p>
                   </div>
                 ))}
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
                 {stats.map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-white/10 bg-[#0b0b0d] p-4 text-center">
-                    <p className="text-2xl font-bold text-white">{item.value}</p>
+                  <div key={item.label} className="rounded-2xl border border-white/[0.08] bg-slate-900/50 p-4 text-center transition-all duration-300 hover:scale-[1.05] hover:border-red-400/30">
+                    <p className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-violet-400">{item.value}</p>
                     <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-white/45">{item.label}</p>
                   </div>
                 ))}
@@ -118,7 +118,7 @@ export default function HomePage() {
         </section>
 
         <section className="mt-20 grid gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-2 rounded-[2rem] border border-white/10 bg-[#111114]/80 p-8 shadow-soft">
+          <div className="lg:col-span-2 rounded-[2rem] border border-white/[0.08] bg-white/[0.03] p-8 shadow-[0_8px_40px_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-500 hover:border-white/[0.12]">
             <div className="flex items-center gap-4 text-red-300">
               <MapPin className="h-5 w-5" />
               <span className="text-sm font-semibold uppercase tracking-[0.3em]">Community impact</span>
@@ -128,18 +128,18 @@ export default function HomePage() {
               Citizens can report issues quickly, and local administrators can act on confirmed incidents with more confidence. The platform emphasizes accountability, transparency, and measurable progress.
             </p>
             <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-3xl border border-white/10 bg-[#0b0b0d] p-6">
-                <p className="text-3xl font-black text-white">80%</p>
+              <div className="rounded-3xl border border-white/[0.08] bg-slate-900/50 p-6 transition-all duration-300 hover:scale-[1.03] hover:border-red-400/30">
+                <p className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-rose-300">80%</p>
                 <p className="mt-2 text-sm text-white/60">Faster issue visibility for teams</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-[#0b0b0d] p-6">
-                <p className="text-3xl font-black text-white">72K</p>
+              <div className="rounded-3xl border border-white/[0.08] bg-slate-900/50 p-6 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/30">
+                <p className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-purple-300">72K</p>
                 <p className="mt-2 text-sm text-white/60">Collective reports filed last quarter</p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[2rem] border border-white/10 bg-[#111114]/80 p-8 shadow-soft">
+          <div className="rounded-[2rem] border border-white/[0.08] bg-white/[0.03] p-8 shadow-[0_8px_40px_rgba(0,0,0,0.4)] backdrop-blur-2xl transition-all duration-500 hover:border-white/[0.12]">
             <div className="flex items-center gap-3 text-violet-300">
               <ShieldCheck className="h-5 w-5" />
               <span className="text-sm font-semibold uppercase tracking-[0.3em]">Why it matters</span>
@@ -152,7 +152,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="mt-20 rounded-[2rem] border border-white/10 bg-[#111114]/80 p-8 shadow-soft">
+        <section className="mt-20 mb-12 rounded-[2rem] border border-white/[0.08] bg-white/[0.03] p-8 shadow-[0_8px_40px_rgba(0,0,0,0.4)] backdrop-blur-2xl">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm font-semibold uppercase tracking-[0.3em] text-red-300">Explore fix-my-roads</p>
@@ -162,14 +162,14 @@ export default function HomePage() {
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Link href="/signup" className="rounded-2xl border border-white/10 bg-[#0b0b0d] px-5 py-4 text-sm font-semibold text-white transition hover:border-red-400/60 hover:text-red-100">Sign up</Link>
-              <Link href="/login" className="rounded-2xl border border-white/10 bg-[#0b0b0d] px-5 py-4 text-sm font-semibold text-white transition hover:border-red-400/60 hover:text-red-100">Login</Link>
-              <Link href="/report" className="rounded-2xl border border-white/10 bg-[#0b0b0d] px-5 py-4 text-sm font-semibold text-white transition hover:border-red-400/60 hover:text-red-100">Report an issue</Link>
-              <Link href="/dashboard" className="rounded-2xl border border-white/10 bg-[#0b0b0d] px-5 py-4 text-sm font-semibold text-white transition hover:border-red-400/60 hover:text-red-100">Dashboard</Link>
-              <Link href="/reports" className="rounded-2xl border border-white/10 bg-[#0b0b0d] px-5 py-4 text-sm font-semibold text-white transition hover:border-red-400/60 hover:text-red-100">Reports overview</Link>
-              <Link href="/nearby" className="rounded-2xl border border-white/10 bg-[#0b0b0d] px-5 py-4 text-sm font-semibold text-white transition hover:border-red-400/60 hover:text-red-100">Nearby issues</Link>
-              <Link href="/notifications" className="rounded-2xl border border-white/10 bg-[#0b0b0d] px-5 py-4 text-sm font-semibold text-white transition hover:border-red-400/60 hover:text-red-100">Notifications</Link>
-              <Link href="/profile" className="rounded-2xl border border-white/10 bg-[#0b0b0d] px-5 py-4 text-sm font-semibold text-white transition hover:border-red-400/60 hover:text-red-100">Profile</Link>
+              <Link href="/signup" className="rounded-2xl border border-white/[0.08] bg-slate-900/50 px-5 py-4 text-sm font-semibold text-white/90 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/40 hover:bg-white/[0.06] hover:text-white">Sign up</Link>
+              <Link href="/login" className="rounded-2xl border border-white/[0.08] bg-slate-900/50 px-5 py-4 text-sm font-semibold text-white/90 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/40 hover:bg-white/[0.06] hover:text-white">Login</Link>
+              <Link href="/report" className="rounded-2xl border border-white/[0.08] bg-slate-900/50 px-5 py-4 text-sm font-semibold text-white/90 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/40 hover:bg-white/[0.06] hover:text-white">Report an issue</Link>
+              <Link href="/dashboard" className="rounded-2xl border border-white/[0.08] bg-slate-900/50 px-5 py-4 text-sm font-semibold text-white/90 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/40 hover:bg-white/[0.06] hover:text-white">Dashboard</Link>
+              <Link href="/reports" className="rounded-2xl border border-white/[0.08] bg-slate-900/50 px-5 py-4 text-sm font-semibold text-white/90 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/40 hover:bg-white/[0.06] hover:text-white">Reports overview</Link>
+              <Link href="/nearby" className="rounded-2xl border border-white/[0.08] bg-slate-900/50 px-5 py-4 text-sm font-semibold text-white/90 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/40 hover:bg-white/[0.06] hover:text-white">Nearby issues</Link>
+              <Link href="/notifications" className="rounded-2xl border border-white/[0.08] bg-slate-900/50 px-5 py-4 text-sm font-semibold text-white/90 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/40 hover:bg-white/[0.06] hover:text-white">Notifications</Link>
+              <Link href="/profile" className="rounded-2xl border border-white/[0.08] bg-slate-900/50 px-5 py-4 text-sm font-semibold text-white/90 transition-all duration-300 hover:scale-[1.03] hover:border-violet-400/40 hover:bg-white/[0.06] hover:text-white">Profile</Link>
             </div>
           </div>
         </section>

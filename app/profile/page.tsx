@@ -9,7 +9,7 @@ import { Input } from "../../components/ui/Input";
 import { Navbar } from "../../components/navbar/Navbar";
 
 export default function ProfilePage() {
-  const { user, ready, logout, elevateToAdmin } = useAuth();
+  const { user, ready, logout, elevateToAdmin, demoteToClient } = useAuth();
   const router = useRouter();
   const [adminCode, setAdminCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +36,21 @@ export default function ProfilePage() {
       }
       setAdminCode("");
       setShowElevateForm(false);
-      // Page will re-render with admin role
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDowngradeToClient = async () => {
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const result = await demoteToClient();
+      if (!result.success) {
+        setError(result.error ?? "Could not switch account to client.");
+        return;
+      }
     } finally {
       setIsLoading(false);
     }
@@ -78,7 +92,7 @@ export default function ProfilePage() {
                 <div>
                   <p className="text-sm text-slate-500">Account type</p>
                   <p className={user.role === "admin" ? "text-rose-300 font-semibold" : "text-teal-300"}>
-                    {user.role === "admin" ? "Admin" : "User"}
+                    {user.role === "admin" ? "Admin" : "Client"}
                   </p>
                 </div>
               </div>
@@ -92,7 +106,15 @@ export default function ProfilePage() {
                 ) : (
                   <>
                     <p className="text-sm text-emerald-300">✓ Email verified. You can submit reports.</p>
-                    {user.role !== "admin" && (
+                    {user.role === "admin" ? (
+                      <Button
+                        variant="secondary"
+                        onClick={handleDowngradeToClient}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? "Switching..." : "Switch to Client"}
+                      </Button>
+                    ) : (
                       <Button
                         variant="secondary"
                         onClick={() => setShowElevateForm(!showElevateForm)}

@@ -53,15 +53,13 @@ export async function POST(request: NextRequest) {
     }
 
     const adminDb = createAdminClient();
-    const metadataRole = authData.user.user_metadata?.role === "admin" ? "admin" : "client";
 
+    // Fetch profile from database - this is the source of truth for role
     const { data: profile, error: profileError } = await adminDb
       .from("profiles")
       .select("id, full_name, phone, role, created_at, updated_at")
       .eq("id", authData.user.id)
       .maybeSingle();
-
-    let resolvedProfile = profile;
 
     if (profileError) {
       console.error("Profile lookup error:", profileError.message);
@@ -71,6 +69,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // If no profile exists, create one as client
+    let resolvedProfile = profile;
     if (!resolvedProfile) {
       const emailValue = authData.user.email ?? "";
       const baseName = authData.user.user_metadata?.full_name || emailValue.split("@")[0] || "User";
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
             id: authData.user.id,
             full_name: fallbackFullName,
             phone: authData.user.user_metadata?.phone ?? null,
-            role: metadataRole
+            role: "client"
           },
           { onConflict: "id" }
         )
@@ -100,7 +100,8 @@ export async function POST(request: NextRequest) {
       resolvedProfile = createdProfile;
     }
 
-    const normalizedRole = resolvedProfile.role === "admin" ? "admin" : metadataRole;
+    // Use the role from the database directly - it's the source of truth
+    const roleFromDatabase = resolvedProfile.role === "admin" ? "admin" : "client";
     const verified = Boolean(authData.user.email_confirmed_at);
 
     const finalResponse = NextResponse.json({
@@ -110,7 +111,7 @@ export async function POST(request: NextRequest) {
         full_name: resolvedProfile.full_name,
         email: authData.user.email,
         phone: resolvedProfile.phone,
-        role: normalizedRole,
+        role: roleFromDatabase,
         verified
       }
     }, { status: 200 });

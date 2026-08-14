@@ -8,12 +8,17 @@ const nextConfig = {
       }
     ]
   },
-  webpack: (config) => {
-    config.cache = false;
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.cache = false;
+    }
     return config;
   }
 };
 
 export default nextConfig;
+
+
+
 
 

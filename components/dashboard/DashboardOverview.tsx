@@ -12,7 +12,7 @@ import { useAuth } from "../AuthContext";
 
 export function DashboardOverview() {
   const router = useRouter();
-  const { user, ready, reports, notifications } = useAuth();
+  const { user, ready, reports, notifications, adminMode } = useAuth();
 
   useEffect(() => {
     if (!ready) return;
@@ -30,8 +30,53 @@ export function DashboardOverview() {
     [reports, user]
   );
 
-  if (!ready || !user) {
-    return <div className="min-h-screen bg-slate-950" />;
+  if (!ready) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white">
+        <Navbar />
+        <main className="mx-auto flex min-h-[calc(100vh-96px)] items-center justify-center px-6 py-12">
+          <Card className="w-full max-w-md border border-white/10 bg-slate-900/70 p-8 text-center shadow-soft">
+            <p className="text-sm uppercase tracking-[0.35em] text-teal-300">Loading</p>
+            <h2 className="mt-4 text-2xl font-semibold text-white">Checking your session...</h2>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white">
+        <Navbar />
+        <main className="mx-auto flex min-h-[calc(100vh-96px)] max-w-md items-center justify-center px-6 py-12">
+          <Card className="w-full border border-white/10 bg-slate-900/70 p-8 text-center shadow-soft">
+            <p className="text-sm uppercase tracking-[0.35em] text-teal-300">Redirecting</p>
+            <h2 className="mt-4 text-2xl font-semibold text-white">Redirecting to login...</h2>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
+  if (adminMode) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white">
+        <Navbar />
+        <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
+          <div className="rounded-[2rem] border border-violet-500/30 bg-slate-900/80 p-8 shadow-soft">
+            <p className="text-sm uppercase tracking-[0.3em] text-violet-300">Admin access</p>
+            <h1 className="mt-3 text-3xl font-semibold text-white">You are signed in as an administrator.</h1>
+            <p className="mt-3 max-w-2xl text-slate-300">
+              This account is in admin mode and is intended to manage reports, resolve incidents, and monitor local issue activity.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-4">
+              <Button onClick={() => router.push("/admin")}>Open Admin Panel</Button>
+              <Button variant="secondary" onClick={() => router.push("/notifications")}>Open Alerts</Button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
   }
 
   return (

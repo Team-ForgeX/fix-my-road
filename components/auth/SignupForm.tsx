@@ -18,6 +18,7 @@ export function SignupForm() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [adminCode, setAdminCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [emailVerificationSent, setEmailVerificationSent] = useState(false);
@@ -25,8 +26,9 @@ export function SignupForm() {
 
   useEffect(() => {
     if (!ready || !user) return;
-    router.replace(user.role === "admin" ? "/admin" : "/dashboard");
-  }, [ready, router, user]);
+    window.location.href = user.role === "admin" ? "/admin" : "/dashboard";
+  }, [ready, user]);
+
 
   if (!ready) {
     return (
@@ -68,7 +70,8 @@ export function SignupForm() {
         full_name: fullName,
         email,
         phone,
-        password
+        password,
+        admin_code: adminCode || undefined
       });
 
       if (!result.success) {
@@ -131,6 +134,7 @@ export function SignupForm() {
                 setPhone("");
                 setPassword("");
                 setConfirmPassword("");
+                setAdminCode("");
                 setError(null);
               }}
             >
@@ -239,6 +243,18 @@ export function SignupForm() {
               />
             </div>
 
+            <div>
+              <label className="mb-2 block text-sm font-medium text-slate-300">Admin access code (optional)</label>
+              <Input
+                type="password"
+                value={adminCode}
+                onChange={(event) => setAdminCode(event.target.value)}
+                placeholder="Enter admin code to sign up as admin, or leave blank for client"
+                disabled={isLoading}
+              />
+              <p className="mt-2 text-xs text-slate-500">If you have an admin code and enter it correctly, your account will be created as admin. Otherwise, it will be created as a regular client account.</p>
+            </div>
+
             {!validation.passwordsMatch && confirmPassword && (
               <p className="text-sm text-rose-300">Passwords do not match.</p>
             )}
@@ -252,7 +268,7 @@ export function SignupForm() {
 
           <div className="mt-8 flex items-center justify-center gap-2 rounded-2xl border border-violet-400/30 bg-violet-500/5 px-4 py-3 text-sm text-violet-100">
             <ShieldCheck className="h-4 w-4" />
-            Admin access is granted later through the secure upgrade flow.
+            Become admin at signup with a code, or upgrade later from your profile.
           </div>
 
           <p className="mt-6 text-center text-sm text-slate-400">

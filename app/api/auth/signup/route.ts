@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     const email = String(body?.email ?? "").trim().toLowerCase();
     const phone = String(body?.phone ?? "").trim();
     const password = String(body?.password ?? "");
-    const requestedRole = "client";
+    const adminCode = String(body?.admin_code ?? "").trim();
 
     if (!fullName || !email || !password) {
       return NextResponse.json(
@@ -34,10 +34,22 @@ export async function POST(request: Request) {
       );
     }
 
+    // Determine role: if admin code provided and valid, they become admin; otherwise client
+    let requestedRole: "client" | "admin" = "client";
+    if (adminCode) {
+      const envAdminCode = process.env.ADMIN_CODE;
+      if (envAdminCode && adminCode === envAdminCode.trim()) {
+        requestedRole = "admin";
+      } else {
+        return NextResponse.json(
+          { success: false, error: "Invalid admin access code. Account will be created as client." },
+          { status: 400 }
+        );
+      }
+    }
+
     const supabase = createClient();
     const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-
-    const normalizedRole = "client";
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
@@ -47,8 +59,8 @@ export async function POST(request: Request) {
         data: {
           full_name: fullName,
           phone: phone || null,
-          requested_role: normalizedRole,
-          role: normalizedRole
+          requested_role: requestedRole,
+          role: requestedRole
         }
       }
     });
@@ -84,7 +96,7 @@ export async function POST(request: Request) {
           ...(authData.user.user_metadata ?? {}),
           full_name: fullName,
           phone: phone || null,
-          role: normalizedRole,
+          role: requestedRole,
           email_verification_token: verificationToken,
           email_verification_expires_at: expiresAt
         }
@@ -105,7 +117,8 @@ export async function POST(request: Request) {
       message: "Verification email sent. Please check your email to confirm your account.",
       user: {
         id: authData.user.id,
-        email
+        email,
+        role: requestedRole
       }
     });
   } catch (error: any) {
