@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import { analyzeReport } from "./ml/analyzeReport";
 import type { Report, ReportStatus } from "../types/report";
 import type { UserProfile } from "../types/user";
 
@@ -8,6 +9,8 @@ export type SaveReportPayload = {
   userId: string;
   title?: string;
   description: string;
+  problemType?: string;
+  severity?: "low" | "medium" | "high" | "critical";
   latitude: number;
   longitude: number;
   address: string;
@@ -95,12 +98,26 @@ export async function updateIdentityVerification(userId: string, verified: boole
  */
 export async function submitReportToSupabase(payload: SaveReportPayload): Promise<SubmitReportResult> {
   try {
-    // 1. Insert into reports table
+    // 1. Run ML classification analysis on the report details
+    const mlResult = await analyzeReport({
+      reportId: `R${Date.now()}`,
+      description: payload.description,
+      imageUrls: [],
+      latitude: payload.latitude,
+      longitude: payload.longitude
+    });
+
+    const detectedProblemType = payload.problemType || mlResult.problem_type || "general";
+    const detectedSeverity = payload.severity || mlResult.severity || "medium";
+
+    // 2. Insert into reports table with ML analysis results
     const { data: report, error: reportError } = await supabase
       .from("reports")
       .insert({
         user_id: payload.userId,
         description: payload.description,
+        problem_type: detectedProblemType,
+        severity: detectedSeverity,
         latitude: payload.latitude,
         longitude: payload.longitude,
         address: payload.address,
@@ -108,7 +125,8 @@ export async function submitReportToSupabase(payload: SaveReportPayload): Promis
         city: payload.city || null,
         pincode: payload.pincode || null,
         source_type: "web",
-        processing_state: "pending"
+        processing_state: "pending",
+        ml_analysis: mlResult as any
       })
       .select()
       .single();
@@ -117,7 +135,7 @@ export async function submitReportToSupabase(payload: SaveReportPayload): Promis
       throw new Error(reportError?.message || "Failed to create report record.");
     }
 
-    // 2. Upload media files if provided
+    // 3. Upload media files if provided
     if (payload.mediaFiles && payload.mediaFiles.length > 0) {
       for (const file of payload.mediaFiles) {
         const fileExt = file.name.split(".").pop();
@@ -145,11 +163,11 @@ export async function submitReportToSupabase(payload: SaveReportPayload): Promis
       }
     }
 
-    // 3. Trigger smart deduplication PL/pgSQL function
+    // 4. Trigger smart multi-factor deduplication PL/pgSQL function
     let incidentId: string | null = null;
     const { data: dedupeResult, error: dedupeErr } = await supabase.rpc(
       "process_report_deduplication",
-      { p_report_id: report.id, p_radius_meters: 100.0 }
+      { p_report_id: report.id, p_radius_meters: 500.0 }
     );
 
     if (!dedupeErr && dedupeResult) {

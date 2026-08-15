@@ -61,7 +61,8 @@ type AuthContextValue = {
     description: string;
     mediaFiles: File[];
     location: LocationPayload;
-  }) => Promise<{ success: boolean; error?: string }>;
+    problemType?: string;
+  }) => Promise<{ success: boolean; error?: string; dedupeDecision?: "new" | "linked" }>;
   updateReportStatus: (reportId: string, status: Report["status"]) => void;
   allReports: Report[];
   notifications: AppNotification[];
@@ -274,9 +275,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setReports(initialReports());
     setNotifications(initialNotifications());
 
+<<<<<<< HEAD
     // Helper to build and set user from a session user object
     // Role is ALWAYS sourced from the DB profiles table, never from user_metadata
     const resolveAndSetUser = async (sessionUser: { id: string; email?: string; email_confirmed_at?: string | null; user_metadata?: Record<string, unknown> }) => {
+=======
+    // Set up auth state listener
+    const subscription = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
+      const sessionUser = session?.user;
+
+      // If no session, clear user
+      if (!sessionUser?.id) {
+        setUser(null);
+        if (isInitializing) {
+          setReady(true);
+          isInitializing = false;
+        }
+        return;
+      }
+
+      // User has session, load profile and set user
+>>>>>>> f637b6006ce757eb0ae9537fb7be28b1541eb93c
       const isConfirmed = Boolean(sessionUser.email_confirmed_at);
       // Metadata role is only used when creating a brand-new profile row for the first time
       const signupMetaRole = normalizeRole(
@@ -482,7 +503,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!currentUser) return null;
       return { ...currentUser, role: "client" };
     });
-    
+
     await syncUserData(user.id, false);
     return { success: true };
   };
@@ -556,7 +577,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await logout();
   };
 
-  const saveReport = async ({ title, description, mediaFiles, location }: { title: string; description: string; mediaFiles: File[]; location: LocationPayload }) => {
+  const saveReport = async ({ title, description, mediaFiles, location, problemType }: { title: string; description: string; mediaFiles: File[]; location: LocationPayload; problemType?: string }) => {
     if (!user) {
       return { success: false, error: "Sign in before submitting a report." };
     }
@@ -564,11 +585,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Complete identity verification before submitting reports." };
     }
 
+<<<<<<< HEAD
     // Submit report directly to Supabase
     const submitRes = await submitReportToSupabase({
+=======
+    const supaResult = await submitReportToSupabase({
+>>>>>>> f637b6006ce757eb0ae9537fb7be28b1541eb93c
       userId: user.id,
       title,
       description: description.trim(),
+      problemType,
       latitude: 28.6139 + Math.random() * 0.01,
       longitude: 77.2090 + Math.random() * 0.01,
       address: location.address,
@@ -576,6 +602,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       city: location.city,
       pincode: location.pincode,
       mediaFiles
+<<<<<<< HEAD
+=======
+    }).catch((err) => {
+      console.warn("Supabase background save fallback:", err);
+      return null;
+>>>>>>> f637b6006ce757eb0ae9537fb7be28b1541eb93c
     });
 
     if (!submitRes.success) {
@@ -611,9 +643,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.localStorage.removeItem("fixmyroad_report_location");
     }
 
+<<<<<<< HEAD
     // Sync state
     await syncUserData(user.id, user.role === "admin");
     return { success: true };
+=======
+    saveReports(nextReports);
+    saveNotifications(nextNotifications);
+
+    const dedupeDecision: "new" | "linked" = supaResult && "incidentId" in supaResult && supaResult.incidentId ? "linked" : "new";
+    return {
+      success: true,
+      dedupeDecision
+    };
+>>>>>>> f637b6006ce757eb0ae9537fb7be28b1541eb93c
   };
 
   const updateReportStatus = async (reportId: string, status: Report["status"]) => {
