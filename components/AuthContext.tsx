@@ -139,45 +139,49 @@ const initialNotifications = (): AppNotification[] => {
   return readJson<AppNotification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
 };
 
-const resolveRole = (role?: string | null, fallback: "client" | "admin" = "client") => {
+const normalizeRole = (role?: string | null, fallback: "client" | "admin" = "client"): "client" | "admin" => {
   if (role === "admin") return "admin";
   if (role === "client") return "client";
   return fallback;
 };
 
-const combineRoles = (...roles: Array<string | null | undefined>) => {
-  return roles.some((role) => resolveRole(role, "client") === "admin") ? "admin" : "client";
-};
-
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 function buildAuthUser(profile: UserProfile, email: string, emailConfirmed: boolean, preferredRole: "client" | "admin" = "client"): AuthUser {
+  const resolvedRole = normalizeRole(profile.role ?? preferredRole, preferredRole);
+
   return {
     ...profile,
-    role: combineRoles(profile.role, preferredRole),
-    email,
+    role: resolvedRole,
+    email: email || profile.email || "",
     verified: emailConfirmed
   };
 }
 
 async function loadProfile(userId: string, email: string, emailConfirmed: boolean, preferredRole: "client" | "admin" = "client") {
   const profileResult = await fetchUserProfile(userId);
+
+  // Profile exists — ALWAYS use the DB role as source of truth, never overwrite
   if (profileResult.data) {
-    return { success: true, user: buildAuthUser(profileResult.data, email, emailConfirmed, preferredRole) };
+    const dbRole = normalizeRole(profileResult.data.role, "client");
+    return { success: true, user: buildAuthUser(profileResult.data, email, emailConfirmed, dbRole) };
   }
 
+  // No profile yet (first login after email confirm) — create one using signup metadata role
   const fallbackName = email ? email.split("@")[0] : "User";
   const { data: newProfile, error: createError } = await createCitizenProfile({
     id: userId,
+    email,
     full_name: fallbackName,
-    role: preferredRole
+    role: preferredRole   // Only used here for brand-new profiles
   });
 
   if (!createError && newProfile) {
-    return { success: true, user: buildAuthUser(newProfile, email, emailConfirmed) };
+    const newRole = normalizeRole(newProfile.role, preferredRole);
+    return { success: true, user: buildAuthUser(newProfile, email, emailConfirmed, newRole) };
   }
 
-  return { success: false, error: profileResult.error?.message ?? "Profile not found." };
+  return { success: false, error: (profileResult.error as any)?.message ?? "Profile not found." };
 }
 
 
@@ -188,76 +192,157 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [ready, setReady] = useState(false);
 
+  const syncUserData = async (userId: string, isAdmin: boolean) => {
+    try {
+      // 1. Fetch reports with linked incidents and media
+      let reportsQuery = supabase
+        .from("reports")
+        .select("*, report_media(*), incidents(*)")
+        .order("created_at", { ascending: false });
+
+      if (!isAdmin) {
+        reportsQuery = reportsQuery.eq("user_id", userId);
+      }
+
+      const { data: reportsData, error: reportsErr } = await reportsQuery;
+
+      if (!reportsErr && reportsData) {
+        const mappedReports: Report[] = reportsData.map((r: any) => {
+          const incident = r.incidents;
+          return {
+            id: r.id,
+            user_id: r.user_id,
+            incident_id: r.incident_id || undefined,
+            title: incident?.title || r.address || "Road Issue",
+            description: r.description,
+            latitude: Number(r.latitude),
+            longitude: Number(r.longitude),
+            address: r.address || "",
+            landmark: r.landmark || undefined,
+            locality: r.locality || "Unknown",
+            city: r.city || "",
+            created_at: r.created_at,
+            processing_state: r.processing_state || "submitted",
+            status: incident?.status || "open",
+            severity: incident?.severity || "medium",
+            report_count: incident?.report_count || 1,
+            is_duplicate: r.is_duplicate || false,
+            media: (r.report_media || []).map((m: any) => ({
+              id: m.id,
+              report_id: m.report_id,
+              media_type: m.media_type,
+              file_name: m.storage_path.split("/").pop() || "media",
+              thumbnail_url: m.storage_path,
+              size: Number(m.file_size || 0),
+              created_at: m.created_at
+            }))
+          };
+        });
+        setReports(mappedReports);
+        writeJson(STORAGE_KEYS.REPORTS, mappedReports);
+      }
+
+      // 2. Fetch notifications
+      const { data: notifsData, error: notifsErr } = await supabase
+        .from("notifications")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+
+      if (!notifsErr && notifsData) {
+        const mappedNotifs: AppNotification[] = notifsData.map((n: any) => ({
+          id: n.id,
+          type: n.report_id ? "report_updated" : "system",
+          title: n.title,
+          message: n.message,
+          priority: "medium",
+          reportId: n.report_id || undefined,
+          timestamp: n.created_at,
+          read: n.is_read
+        }));
+        setNotifications(mappedNotifs);
+        writeJson(STORAGE_KEYS.NOTIFICATIONS, mappedNotifs);
+      }
+    } catch (e) {
+      console.error("Error in syncUserData:", e);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
-    let isInitializing = true;
 
     setReports(initialReports());
     setNotifications(initialNotifications());
 
-    // Set up auth state listener
-    const subscription = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-
-      const sessionUser = session?.user;
-      
-      // If no session, clear user
-      if (!sessionUser?.id) {
-        setUser(null);
-        if (isInitializing) {
-          setReady(true);
-          isInitializing = false;
-        }
-        return;
-      }
-
-      // User has session, load profile and set user
+    // Helper to build and set user from a session user object
+    // Role is ALWAYS sourced from the DB profiles table, never from user_metadata
+    const resolveAndSetUser = async (sessionUser: { id: string; email?: string; email_confirmed_at?: string | null; user_metadata?: Record<string, unknown> }) => {
       const isConfirmed = Boolean(sessionUser.email_confirmed_at);
-      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "", isConfirmed, "client");
+      // Metadata role is only used when creating a brand-new profile row for the first time
+      const signupMetaRole = normalizeRole(
+        (sessionUser.user_metadata?.role as string) ??
+        (sessionUser.user_metadata?.requested_role as string)
+      );
+      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "", isConfirmed, signupMetaRole);
 
       if (!mounted) return;
 
       if (profileResult.success && profileResult.user) {
-        // Use role directly from database - it's the source of truth
-        setUser({
-          ...profileResult.user,
-          role: profileResult.user.role === "admin" ? "admin" : "client"
-        });
+        // profileResult.user.role is already the DB role
+        setUser(profileResult.user);
+        await syncUserData(profileResult.user.id, profileResult.user.role === "admin");
       } else {
-        // Fallback if profile loading fails
-        console.warn("Profile load failed:", profileResult.error);
-        setUser({
+        console.warn("Profile load failed — using metadata fallback:", profileResult.error);
+        const fallbackUser: AuthUser = {
           id: sessionUser.id,
-          full_name: sessionUser.user_metadata?.full_name || sessionUser.email?.split("@")[0] || "User",
-          phone: sessionUser.user_metadata?.phone || null,
-          role: "client",
+          full_name: (sessionUser.user_metadata?.full_name as string) || sessionUser.email?.split("@")[0] || "User",
+          phone: (sessionUser.user_metadata?.phone as string) || null,
+          role: signupMetaRole,
           email: sessionUser.email ?? "",
           verified: isConfirmed,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
-      }
-
-      if (isInitializing) {
-        setReady(true);
-        isInitializing = false;
-      }
-    });
-
-    // Check session on mount
-    const checkInitialSession = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          console.warn("Initial session check error:", error.message);
-        }
-        // onAuthStateChange will handle setting user from the session
-      } catch (err) {
-        console.warn("Session check failed:", err instanceof Error ? err.message : String(err));
+        };
+        setUser(fallbackUser);
+        await syncUserData(fallbackUser.id, fallbackUser.role === "admin");
       }
     };
 
-    checkInitialSession();
+    // 1. First, get the current session so we know auth state before rendering
+    const initAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!mounted) return;
+
+      if (session?.user) {
+        await resolveAndSetUser(session.user);
+      } else {
+        // No session — user is logged out
+        setUser(null);
+      }
+
+      // Only mark ready AFTER we know the session state
+      if (mounted) setReady(true);
+    };
+
+    initAuth();
+
+    // 2. Listen for future auth changes (login/logout/token refresh)
+    const subscription = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
+      const sessionUser = session?.user;
+
+      if (!sessionUser?.id) {
+        setUser(null);
+        // If this is a sign-out event and ready hasn't been set yet, set it now
+        if (mounted) setReady(true);
+        return;
+      }
+
+      await resolveAndSetUser(sessionUser);
+      if (mounted) setReady(true);
+    });
 
     return () => {
       mounted = false;
@@ -285,24 +370,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (authError || !authData?.user) {
-        return { success: false, error: authError?.message ?? "Unable to sign in." };
+        return { success: false, error: authError?.message ?? "Invalid email or password." };
       }
 
       const isConfirmed = Boolean(authData.user.email_confirmed_at);
-      const profileResult = await loadProfile(authData.user.id, authData.user.email ?? "", isConfirmed, "client");
+
+      // Use signup metadata role ONLY as a fallback for brand-new users with no profile yet
+      // For existing users, DB profile role is always authoritative (see loadProfile)
+      const signupMetaRole = normalizeRole(
+        (authData.user.user_metadata?.role as string) ??
+        (authData.user.user_metadata?.requested_role as string)
+      );
+
+      const profileResult = await loadProfile(
+        authData.user.id,
+        authData.user.email ?? "",
+        isConfirmed,
+        signupMetaRole  // Only used if no profile row exists yet
+      );
 
       if (!profileResult.success || !profileResult.user) {
+        // Profile creation failed — use metadata as emergency fallback (no DB overwrite)
         const fallbackUser: AuthUser = {
           id: authData.user.id,
-          full_name: authData.user.user_metadata?.full_name || normalizedEmail.split("@")[0] || "User",
-          phone: authData.user.user_metadata?.phone || null,
-          role: "client",
+          full_name: (authData.user.user_metadata?.full_name as string) || normalizedEmail.split("@")[0] || "User",
+          phone: (authData.user.user_metadata?.phone as string) || null,
+          role: signupMetaRole,
           email: authData.user.email ?? normalizedEmail,
           verified: isConfirmed,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };
         setUser(fallbackUser);
+        await syncUserData(fallbackUser.id, fallbackUser.role === "admin");
         return {
           success: true,
           needsVerification: !fallbackUser.verified,
@@ -310,13 +410,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
-      // Use role directly from database
-      const resolvedUser: AuthUser = {
-        ...profileResult.user,
-        role: profileResult.user.role === "admin" ? "admin" : "client"
-      };
+      // profileResult.user.role is already the DB role (set in loadProfile)
+      const resolvedUser: AuthUser = profileResult.user;
 
       setUser(resolvedUser);
+      await syncUserData(resolvedUser.id, resolvedUser.role === "admin");
       return {
         success: true,
         needsVerification: !resolvedUser.verified,
@@ -344,16 +442,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: data.error ?? "Unable to verify admin code." };
     }
 
-    // After elevation, reload profile from database
     const { data: { user: sessionUser } } = await supabase.auth.getUser();
     if (sessionUser) {
-      const refreshed = await loadProfile(sessionUser.id, sessionUser.email ?? "", Boolean(sessionUser.email_confirmed_at), "client");
+      const refreshed = await loadProfile(sessionUser.id, sessionUser.email ?? "", Boolean(sessionUser.email_confirmed_at), "admin");
       if (refreshed.success && refreshed.user) {
-        // Set role directly from database after elevation
-        setUser({
+        const fullUser = {
           ...refreshed.user,
-          role: refreshed.user.role === "admin" ? "admin" : "client"
-        });
+          role: "admin" as const
+        };
+        setUser(fullUser);
+        await syncUserData(fullUser.id, true);
       }
     }
 
@@ -380,7 +478,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: data.error ?? "Unable to switch account back to client." };
     }
 
-    setUser((currentUser) => currentUser ? { ...currentUser, role: "client" } : currentUser);
+    setUser((currentUser) => {
+      if (!currentUser) return null;
+      return { ...currentUser, role: "client" };
+    });
+    
+    await syncUserData(user.id, false);
     return { success: true };
   };
 
@@ -424,18 +527,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   };
 
-
-  // Legacy mock identity verification is intentionally disabled.
-  // Email verification is the only required verification step before inserting user data.
+  // Legacy identity check disabled
   const verifyIdentity = async (otp: string) => {
-    if (!user) {
-      return { success: false, error: "No active user session found." };
-    }
-    return { success: false, error: "Email verification is required before profile creation. This legacy identity check is disabled." };
+    return { success: false, error: "Legacy verification disabled." };
   };
 
   const logout = async () => {
-    // Clear local state immediately
     setUser(null);
     setReports([]);
     setNotifications([]);
@@ -452,7 +549,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const adminLogin = async (email: string, password: string, _adminCode?: string) => {
-    // Admin login is the same as regular login - role is auto-detected from database
     return login(email, password);
   };
 
@@ -468,7 +564,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Complete identity verification before submitting reports." };
     }
 
-    submitReportToSupabase({
+    // Submit report directly to Supabase
+    const submitRes = await submitReportToSupabase({
       userId: user.id,
       title,
       description: description.trim(),
@@ -479,111 +576,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       city: location.city,
       pincode: location.pincode,
       mediaFiles
-    }).catch((err) => console.warn("Supabase background save fallback:", err));
+    });
 
-    const id = `R${Date.now()}`;
-    const thumbnailEntries = await createMediaItems(mediaFiles, id);
-    const report: Report = {
-      id,
+    if (!submitRes.success) {
+      return { success: false, error: submitRes.error || "Failed to submit report." };
+    }
+
+    // 1. Create client notification in database
+    await supabase.from("notifications").insert({
       user_id: user.id,
-      incident_id: undefined,
-      title: title.trim() || description.trim().slice(0, 45),
-      description: description.trim(),
-      latitude: 28.6139 + Math.random() * 0.01,
-      longitude: 77.2090 + Math.random() * 0.01,
-      address: location.address,
-      landmark: location.landmark,
-      locality: location.city || location.pincode || "Unknown",
-      city: location.city,
-      created_at: new Date().toISOString(),
-      processing_state: "submitted",
-      status: "open",
-      severity: pickSeverity(description),
-      report_count: 1,
-      is_duplicate: false,
-      media: thumbnailEntries
-    };
-
-    // Create notification for citizen
-    const clientNotification: AppNotification = {
-      id: `N${Date.now()}`,
-      type: "report_submitted",
+      report_id: submitRes.reportId,
       title: "Report Submitted",
-      message: `Your report "${report.title}" has been submitted and is awaiting verification.`,
-      priority: "medium",
-      reportId: report.id,
-      timestamp: new Date().toISOString(),
-      read: false
-    };
+      message: `Your report "${title.trim()}" has been submitted and is awaiting verification.`
+    });
 
-    // Create notification for admin
-    const adminNotification: AppNotification = {
-      id: `N${Date.now() + 1}`,
-      type: "new_report_alert",
-      title: "New Report Alert",
-      message: `New ${report.severity} severity report: "${report.title}" in ${report.address}`,
-      priority: report.severity === "high" ? "high" : "medium",
-      reportId: report.id,
-      timestamp: new Date().toISOString(),
-      read: false
-    };
+    // 2. Fetch admin profiles to notify them
+    const { data: admins } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("role", "admin");
 
-    const nextReports = [report, ...reports];
-    const nextNotifications = [clientNotification, adminNotification, ...notifications];
+    if (admins && admins.length > 0) {
+      const adminNotifs = admins.map((adm) => ({
+        user_id: adm.id,
+        report_id: submitRes.reportId,
+        title: "New Report Alert",
+        message: `New report: "${title.trim()}" in ${location.address}`
+      }));
+      await supabase.from("notifications").insert(adminNotifs);
+    }
 
+    // Remove local storage cached location form data
     if (typeof window !== "undefined") {
       window.localStorage.removeItem("fixmyroad_report_location");
     }
 
-    saveReports(nextReports);
-    saveNotifications(nextNotifications);
-
+    // Sync state
+    await syncUserData(user.id, user.role === "admin");
     return { success: true };
   };
 
-  const updateReportStatus = (reportId: string, status: Report["status"]) => {
-    executeAdminAction({
-      incidentId: reportId,
-      adminId: user?.id || "admin-1",
-      newStatus: status
-    }).catch((err) => console.warn("Supabase admin action fallback:", err));
-
+  const updateReportStatus = async (reportId: string, status: Report["status"]) => {
+    if (!user) return;
     const report = reports.find((r) => r.id === reportId);
-    const nextReports = reports.map((r) => {
-      if (r.id !== reportId) return r;
-      const nextProcessing = status === "resolved" ? "resolved" : status === "in_progress" ? "assigned" : r.processing_state;
-      return { ...r, status, processing_state: nextProcessing };
-    });
-    saveReports(nextReports);
+    const targetIncidentId = report?.incident_id || reportId;
 
-    // Create notification for the report owner
-    if (report) {
-      const stageText = status === "in_progress" ? "In Progress" : status === "resolved" ? "Resolved" : "Open";
-      const notification: AppNotification = {
-        id: `N${Date.now()}`,
-        type: status === "resolved" ? "report_resolved" : "report_updated",
-        title: status === "resolved" ? "Report Resolved" : "Report Update",
-        message: `Your report "${report.title}" has been updated to: ${stageText}`,
-        priority: status === "resolved" ? "high" : "medium",
-        reportId: reportId,
-        timestamp: new Date().toISOString(),
-        read: false
-      };
-      const nextNotifications = [notification, ...notifications];
-      saveNotifications(nextNotifications);
+    try {
+      const res = await executeAdminAction({
+        incidentId: targetIncidentId,
+        adminId: user.id,
+        newStatus: status
+      });
+
+      if (res.success) {
+        await syncUserData(user.id, user.role === "admin");
+      }
+    } catch (err) {
+      console.warn("Supabase admin action error:", err);
     }
   };
 
-  const markNotificationAsRead = (notificationId: string) => {
-    const nextNotifications = notifications.map((n) =>
-      n.id === notificationId ? { ...n, read: true } : n
+  const markNotificationAsRead = async (notificationId: string) => {
+    // Optimistic local update
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notificationId ? { ...n, read: true } : n))
     );
-    saveNotifications(nextNotifications);
+
+    await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("id", notificationId);
   };
 
-  const clearNotification = (notificationId: string) => {
-    const nextNotifications = notifications.filter((n) => n.id !== notificationId);
-    saveNotifications(nextNotifications);
+  const clearNotification = async (notificationId: string) => {
+    // Optimistic local update
+    setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+
+    await supabase
+      .from("notifications")
+      .delete()
+      .eq("id", notificationId);
   };
 
   const adminMode = useMemo(() => user?.role === "admin", [user]);
@@ -594,21 +666,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const filteredNotifications = useMemo(() => {
-    if (adminMode) {
-      // Admin sees new report alerts and system messages
-      return notifications
-        .filter((n) => ["new_report_alert", "system"].includes(n.type))
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }
-    if (user) {
-      // Client sees notifications about their own reports
-      const userReportIds = reports.filter((r) => r.user_id === user.id).map((r) => r.id);
-      return notifications
-        .filter((n) => userReportIds.includes(n.reportId || ""))
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }
-    return [];
-  }, [adminMode, notifications, reports, user]);
+    return notifications.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  }, [notifications]);
 
   const allReports = reports;
 

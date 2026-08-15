@@ -34,7 +34,7 @@ export async function requireAdminUser() {
     .single();
 
   if (error || !profile || profile.role !== "admin") {
-    redirect("/login");
+    redirect("/dashboard");
   }
 
   return user;

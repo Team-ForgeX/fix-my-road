@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Bell, LogOut } from "lucide-react";
+import { Menu, Bell, LogOut, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "../ui/Button";
 import { useAuth } from "../AuthContext";
@@ -12,13 +12,15 @@ const citizenNavLinks = [
   { label: "Report Issue", href: "/report" },
   { label: "My Reports", href: "/reports" },
   { label: "Nearby Issues", href: "/nearby" },
-  { label: "Notifications", href: "/notifications" }
+  { label: "Notifications", href: "/notifications" },
+  { label: "Profile", href: "/profile" }
 ];
 
 const adminNavLinks = [
   { label: "Admin Panel", href: "/admin" },
   { label: "Nearby Reports", href: "/nearby" },
-  { label: "Notifications", href: "/notifications" }
+  { label: "Notifications", href: "/notifications" },
+  { label: "Profile", href: "/profile" }
 ];
 
 export function Navbar() {
@@ -48,61 +50,67 @@ export function Navbar() {
           <span className="text-lg tracking-tight">fix-my-roads</span>
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex" aria-label="Primary navigation">
-          <ul className="flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1.5">
-            {navLinks.map((link) => {
-              const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
+        {/* Nav links — only shown when logged in */}
+        {user && (
+          <nav className="hidden items-center gap-6 md:flex" aria-label="Primary navigation">
+            <ul className="flex flex-wrap items-center gap-2 rounded-full border border-white/10 bg-white/5 p-1.5">
+              {navLinks.map((link) => {
+                const isActive = pathname === link.href || pathname.startsWith(`${link.href}/`);
 
-              return (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className={[
-                      "relative inline-flex items-center rounded-full px-3 py-2 text-sm font-medium transition-all duration-200",
-                      "hover:bg-white/10 hover:text-white",
-                      isActive
-                        ? "bg-gradient-to-r from-red-500/20 via-violet-500/20 to-white/5 text-white shadow-[0_0_0_1px_rgba(168,85,247,0.35)] ring-1 ring-violet-400/40"
-                        : "text-white/70"
-                    ].join(" ")}
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+                return (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className={[
+                        "relative inline-flex items-center rounded-full px-3 py-2 text-sm font-medium transition-all duration-200",
+                        "hover:bg-white/10 hover:text-white",
+                        isActive
+                          ? "bg-gradient-to-r from-red-500/20 via-violet-500/20 to-white/5 text-white shadow-[0_0_0_1px_rgba(168,85,247,0.35)] ring-1 ring-violet-400/40"
+                          : "text-white/70"
+                      ].join(" ")}
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+        )}
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => router.push("/notifications")}
-            className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/80 transition hover:border-violet-400/70 hover:text-white"
-            aria-label="Notifications"
-          >
-            <Bell className="h-5 w-5" />
-            {unreadNotificationCount > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
-              </span>
-            )}
-          </button>
-
           {user && (
-            <div className="flex items-center gap-2">
-              {adminMode && (
-                <span className="rounded-full border border-violet-400/40 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-200">
-                  Admin
-                </span>
-              )}
-              <Button
-                variant="ghost"
-                className="hidden md:inline-flex text-sm"
-                onClick={handleLogout}
+            <>
+              <button
+                onClick={() => router.push("/notifications")}
+                className="relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-white/80 transition hover:border-violet-400/70 hover:text-white"
+                aria-label="Notifications"
               >
-                {adminMode ? "Admin Logout" : "Logout"}
-                <LogOut className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
+                <Bell className="h-5 w-5" />
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                    {unreadNotificationCount > 9 ? "9+" : unreadNotificationCount}
+                  </span>
+                )}
+              </button>
+
+              <div className="flex items-center gap-2">
+                {adminMode && (
+                  <span className="hidden md:inline-flex items-center gap-1 rounded-full border border-violet-400/40 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-violet-200">
+                    <ShieldCheck className="h-3 w-3" />
+                    Admin
+                  </span>
+                )}
+                <Button
+                  variant="ghost"
+                  className="hidden md:inline-flex text-sm"
+                  onClick={handleLogout}
+                >
+                  Logout
+                  <LogOut className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            </>
           )}
 
           {!user && (

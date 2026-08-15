@@ -51,13 +51,14 @@ export type ExecuteAdminActionResult = AdminActionSuccess | SupabaseFallbackResu
 export async function fetchUserProfile(userId: string) {
   return supabase
     .from("profiles")
-    .select("id, full_name, role, phone, created_at, updated_at")
+    .select("id, email, full_name, role, phone, created_at, updated_at")
     .eq("id", userId)
-    .single<UserProfile>();
+    .maybeSingle<UserProfile>();
 }
 
 export async function createCitizenProfile(profile: {
   id: string;
+  email?: string | null;
   full_name: string;
   phone?: string | null;
   role?: "client" | "admin";
@@ -67,6 +68,7 @@ export async function createCitizenProfile(profile: {
     .upsert(
       {
         id: profile.id,
+        email: profile.email || null,
         full_name: profile.full_name,
         phone: profile.phone || null,
         role: profile.role || "client",
@@ -74,7 +76,7 @@ export async function createCitizenProfile(profile: {
       },
       { onConflict: "id" }
     )
-    .select("id, full_name, role, phone, created_at, updated_at")
+    .select("id, email, full_name, role, phone, created_at, updated_at")
     .single();
 }
 

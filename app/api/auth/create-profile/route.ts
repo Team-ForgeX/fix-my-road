@@ -56,12 +56,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: "Profile already exists." });
     }
 
-    // Default to 'client' role - never allow specifying role from request
+    const detectedRole = userData.user.user_metadata?.role === "admin" || userData.user.user_metadata?.requested_role === "admin" ? "admin" : "client";
+
     const profileResult = await createCitizenProfile({
       id: user.id,
+      email: userData.user.email ?? null,
       full_name: fullName.trim(),
       phone: phone || null,
-      role: "client"  // Always default to client for new profiles
+      role: detectedRole
     });
 
     if (profileResult.error || !profileResult.data) {

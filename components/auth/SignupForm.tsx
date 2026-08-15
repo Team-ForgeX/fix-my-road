@@ -26,8 +26,8 @@ export function SignupForm() {
 
   useEffect(() => {
     if (!ready || !user) return;
-    window.location.href = user.role === "admin" ? "/admin" : "/dashboard";
-  }, [ready, user]);
+    router.replace(user.role === "admin" ? "/admin" : "/dashboard");
+  }, [ready, router, user]);
 
 
   if (!ready) {

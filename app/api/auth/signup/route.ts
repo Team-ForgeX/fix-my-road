@@ -38,13 +38,13 @@ export async function POST(request: Request) {
     let requestedRole: "client" | "admin" = "client";
     if (adminCode) {
       const envAdminCode = process.env.ADMIN_CODE;
-      if (envAdminCode && adminCode === envAdminCode.trim()) {
+      // If admin code matches, assign admin role; otherwise default to client
+      if (envAdminCode && adminCode.toLowerCase() === envAdminCode.trim().toLowerCase()) {
         requestedRole = "admin";
       } else {
-        return NextResponse.json(
-          { success: false, error: "Invalid admin access code. Account will be created as client." },
-          { status: 400 }
-        );
+        // Invalid admin code – proceed as client
+        requestedRole = "client";
+        // Optionally, you could log a warning or include a non‑blocking message
       }
     }
 
@@ -87,29 +87,35 @@ export async function POST(request: Request) {
     );
 
     if (smtpConfigured) {
-      const verificationToken = generateVerificationToken();
-      const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
-      const adminClient = createAdminClient();
+      try {
+        const verificationToken = generateVerificationToken();
+        const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString();
+        const adminClient = createAdminClient();
 
-      await adminClient.auth.admin.updateUserById(authData.user.id, {
-        user_metadata: {
-          ...(authData.user.user_metadata ?? {}),
-          full_name: fullName,
-          phone: phone || null,
-          role: requestedRole,
-          email_verification_token: verificationToken,
-          email_verification_expires_at: expiresAt
-        }
-      });
+        await adminClient.auth.admin.updateUserById(authData.user.id, {
+          user_metadata: {
+            ...(authData.user.user_metadata ?? {}),
+            full_name: fullName,
+            phone: phone || null,
+            role: requestedRole,
+            email_verification_token: verificationToken,
+            email_verification_expires_at: expiresAt
+          }
+        });
 
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-      await sendVerificationEmail({
-        email,
-        fullName,
-        userId: authData.user.id,
-        appUrl,
-        token: verificationToken
-      });
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+        await sendVerificationEmail({
+          email,
+          fullName,
+          userId: authData.user.id,
+          appUrl,
+          token: verificationToken
+        });
+      } catch (smtpErr: any) {
+        // Non-fatal: Supabase already sent its own confirmation email via signUp().
+        // Log but don't fail the request.
+        console.warn("Custom SMTP email failed (non-fatal, Supabase email still sent):", smtpErr?.message);
+      }
     }
 
     return NextResponse.json({

@@ -5,16 +5,75 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../../components/AuthContext";
 import { Button } from "../../components/ui/Button";
 import { Card } from "../../components/ui/Card";
-import { Input } from "../../components/ui/Input";
 import { Navbar } from "../../components/navbar/Navbar";
+import { supabase, executeAdminAction } from "../../lib/supabaseService";
 import type { Report } from "../../types/report";
 
 export default function AdminPage() {
-  const { user, adminMode, elevateToAdmin, adminLogout, reports, updateReportStatus, ready } = useAuth();
+  const { user, adminLogout, ready } = useAuth();
   const router = useRouter();
-  const [adminCode, setAdminCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  
+  const [reports, setReports] = useState<Report[]>([]);
+  const [mlDecisions, setMlDecisions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<"all" | "pending" | "resolved" | "ml">("all");
+
+  const fetchAdminData = async () => {
+    setIsLoading(true);
+    try {
+      // 1. Fetch reports with linked incidents and media
+      const { data: reportsData, error: reportsError } = await supabase
+        .from("reports")
+        .select("*, report_media(*), incidents(*)")
+        .order("created_at", { ascending: false });
+
+      if (!reportsError && reportsData) {
+        const mapped = reportsData.map((r: any) => ({
+          id: r.id,
+          user_id: r.user_id,
+          incident_id: r.incident_id || undefined,
+          title: r.incidents?.title || r.address || "Road Issue",
+          description: r.description,
+          latitude: Number(r.latitude),
+          longitude: Number(r.longitude),
+          address: r.address || "",
+          landmark: r.landmark || undefined,
+          locality: r.locality || "Unknown",
+          city: r.city || "",
+          created_at: r.created_at,
+          processing_state: r.processing_state || "submitted",
+          status: r.incidents?.status || "open",
+          severity: r.incidents?.severity || "medium",
+          report_count: r.incidents?.report_count || 1,
+          is_duplicate: r.is_duplicate || false,
+          media: (r.report_media || []).map((m: any) => ({
+            id: m.id,
+            report_id: m.report_id,
+            media_type: m.media_type,
+            file_name: m.storage_path.split("/").pop() || "media",
+            thumbnail_url: m.storage_path,
+            size: Number(m.file_size || 0),
+            created_at: m.created_at
+          }))
+        }));
+        setReports(mapped);
+      }
+
+      // 2. Fetch ML deduplication decisions
+      const { data: decisionsData, error: decisionsError } = await supabase
+        .from("dedupe_decisions")
+        .select("*, reports(*)")
+        .order("created_at", { ascending: false });
+
+      if (!decisionsError && decisionsData) {
+        setMlDecisions(decisionsData);
+      }
+    } catch (err) {
+      console.error("Error fetching admin data:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (!ready) return;
@@ -22,10 +81,13 @@ export default function AdminPage() {
       router.replace("/login");
       return;
     }
-    // Admin users can access the page, citizens will see elevation UI
+    if (user.role !== "admin") {
+      router.replace("/dashboard");
+      return;
+    }
+    fetchAdminData();
   }, [ready, router, user]);
 
-  const recentReports = useMemo(() => reports.slice(0, 4), [reports]);
   const stats = useMemo(() => {
     return {
       total: reports.length,
@@ -35,179 +97,189 @@ export default function AdminPage() {
     };
   }, [reports]);
 
-  const handleElevateToAdmin = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError(null);
-    setIsLoading(true);
-    
-    try {
-      const result = await elevateToAdmin(adminCode);
-      if (!result.success) {
-        setError(result.error ?? "Could not elevate to admin.");
-        return;
-      }
-      setAdminCode("");
-      // Page will re-render with new admin role
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleAdminLogout = async () => {
     await adminLogout();
     router.push("/");
   };
 
-  const handleAction = (report: Report, status: Report["status"]) => {
-    updateReportStatus(report.id, status);
+  const handleAction = async (report: Report, status: Report["status"]) => {
+    if (!user) return;
+    
+    // We update the associated incident ID if linked, otherwise report's incident_id
+    const targetId = report.incident_id;
+    if (!targetId) {
+      alert("This report is not associated with an incident yet. Deduplication may be running.");
+      return;
+    }
+
+    try {
+      const res = await executeAdminAction({
+        incidentId: targetId,
+        adminId: user.id,
+        newStatus: status
+      });
+      if (res.success) {
+        fetchAdminData();
+      } else {
+        alert(res.error || "Action failed.");
+      }
+    } catch (err) {
+      console.error("Admin action failed:", err);
+    }
   };
 
-  if (!ready) {
+  const filteredReports = useMemo(() => {
+    return reports.filter((r) => {
+      if (activeTab === "all") return true;
+      if (activeTab === "pending") return r.status === "open" || r.status === "in_progress";
+      if (activeTab === "resolved") return r.status === "resolved";
+      return true;
+    });
+  }, [reports, activeTab]);
+
+  if (!ready || !user || user.role !== "admin") {
     return <div className="min-h-screen bg-slate-950" />;
   }
 
-  if (!adminMode) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-white">
-        <Navbar />
-        <main className="mx-auto flex min-h-[calc(100vh-96px)] max-w-3xl items-center px-6 py-12 lg:px-8">
-          <Card className="w-full space-y-8 p-10">
-            <div>
-              <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Elevate to Admin</p>
-              <h1 className="mt-3 text-3xl font-semibold text-white">Access Admin Dashboard</h1>
-              <p className="mt-2 text-slate-400">
-                You are currently logged in as {user?.full_name}. To access the admin dashboard, please enter your admin access code.
-              </p>
-            </div>
-            <form className="space-y-6" onSubmit={handleElevateToAdmin}>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">Admin Access Code</label>
-                <Input
-                  type="password"
-                  value={adminCode}
-                  onChange={(event) => setAdminCode(event.target.value)}
-                  placeholder="Enter admin access code"
-                  disabled={isLoading}
-                />
-                <p className="mt-2 text-xs text-slate-500">
-                  Contact your administrator for the admin access code.
-                </p>
-              </div>
-              {error ? <p className="text-sm text-rose-300">{error}</p> : null}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Verifying..." : "Elevate to Admin"}
-              </Button>
-            </form>
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full"
-              onClick={() => router.push("/dashboard")}
-            >
-              Return to Dashboard
-            </Button>
-          </Card>
-        </main>
-      </div>
-    );
-  }
-
-  // Admin dashboard
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <Navbar />
       <main className="mx-auto max-w-7xl px-6 py-10 lg:px-8">
         <div className="flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="text-sm uppercase tracking-[0.3em] text-teal-300">Admin dashboard</p>
+            <p className="text-sm uppercase tracking-[0.3em] text-teal-300 font-semibold">Admin Dashboard</p>
             <h1 className="mt-3 text-3xl font-semibold text-white">Verify reports and resolve incidents</h1>
             <p className="mt-2 max-w-2xl text-slate-400">Review incoming reports, assign priorities, and track resolution status for the city's infrastructure team.</p>
           </div>
-          <Button variant="secondary" onClick={handleAdminLogout}>Admin Logout</Button>
+          <div className="flex gap-4">
+            <Button variant="secondary" onClick={fetchAdminData} disabled={isLoading}>
+              {isLoading ? "Refreshing..." : "Refresh"}
+            </Button>
+            <Button variant="secondary" onClick={handleAdminLogout}>Admin Logout</Button>
+          </div>
         </div>
 
         <div className="mt-10 grid gap-4 md:grid-cols-4">
-          <Card className="space-y-4 p-6">
+          <Card className="space-y-4 p-6 bg-slate-900/50 border-slate-800/80">
             <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Total reports</p>
             <p className="text-3xl font-semibold text-white">{stats.total}</p>
           </Card>
-          <Card className="space-y-4 p-6">
+          <Card className="space-y-4 p-6 bg-slate-900/50 border-slate-800/80">
             <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Open</p>
-            <p className="text-3xl font-semibold text-white">{stats.open}</p>
+            <p className="text-3xl font-semibold text-teal-400">{stats.open}</p>
           </Card>
-          <Card className="space-y-4 p-6">
+          <Card className="space-y-4 p-6 bg-slate-900/50 border-slate-800/80">
             <p className="text-sm uppercase tracking-[0.3em] text-slate-400">In progress</p>
-            <p className="text-3xl font-semibold text-white">{stats.inProgress}</p>
+            <p className="text-3xl font-semibold text-amber-400">{stats.inProgress}</p>
           </Card>
-          <Card className="space-y-4 p-6">
+          <Card className="space-y-4 p-6 bg-slate-900/50 border-slate-800/80">
             <p className="text-sm uppercase tracking-[0.3em] text-slate-400">Resolved</p>
-            <p className="text-3xl font-semibold text-white">{stats.resolved}</p>
+            <p className="text-3xl font-semibold text-emerald-400">{stats.resolved}</p>
           </Card>
         </div>
 
-        {/* Filter Options for Admin */}
-        <div className="mt-10">
-          <Card className="rounded-[2rem] border border-slate-800/80 bg-slate-900/50 p-6 shadow-soft">
-            <p className="mb-4 text-sm uppercase tracking-[0.3em] text-slate-300">Filter & Manage Reports</p>
-            <p className="text-sm text-slate-400">
-              Use the Notifications page to see alerts for new reports with filtering options by priority and location.
-            </p>
-          </Card>
+        {/* Tab Selection */}
+        <div className="mt-10 flex gap-2 border-b border-slate-800 pb-4">
+          {(["all", "pending", "resolved", "ml"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                activeTab === tab
+                  ? "bg-teal-500/20 text-teal-300 border border-teal-500/30"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              {tab === "ml" ? "ML DEDUPLICATION DECISIONS" : tab.toUpperCase()}
+            </button>
+          ))}
         </div>
 
-        <div className="mt-10 space-y-6">
-          <div className="rounded-[2rem] border border-slate-800/80 bg-slate-900/80 p-6 shadow-soft">
-            <p className="text-sm uppercase tracking-[0.3em] text-slate-300">Recent Reports</p>
-            <div className="mt-6 space-y-4">
-              {recentReports.length === 0 ? (
-                <p className="text-sm text-slate-400">No reports yet.</p>
-              ) : (
-                recentReports.map((report) => (
-                  <div key={report.id} className="rounded-3xl border border-slate-800/80 bg-slate-950/70 p-5">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="font-semibold text-white">{report.title}</p>
-                        <p className="text-sm text-slate-400">{report.address}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {report.status === "open" && (
-                          <Button size="sm" onClick={() => handleAction(report, "in_progress")}>
-                            Verify
-                          </Button>
-                        )}
-                        {report.status === "in_progress" && (
-                          <Button size="sm" onClick={() => handleAction(report, "in_progress")}>
-                            Processing
-                          </Button>
-                        )}
-                        {report.status !== "resolved" && (
-                          <Button size="sm" variant="ghost" onClick={() => handleAction(report, "resolved")}>
-                            Resolve
-                          </Button>
-                        )}
-                      </div>
+        {activeTab === "ml" ? (
+          <div className="mt-6 space-y-4">
+            {mlDecisions.length === 0 ? (
+              <Card className="p-8 text-center border-slate-800 bg-slate-950/80">
+                <p className="text-slate-400">No ML decisions logged yet.</p>
+              </Card>
+            ) : (
+              mlDecisions.map((decision) => (
+                <div key={decision.id} className="rounded-3xl border border-slate-800/80 bg-slate-900/40 p-5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="font-semibold text-teal-300">Decision: {decision.decision.toUpperCase()}</p>
+                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                      decision.decided_by === "ML" ? "bg-purple-900/30 text-purple-300" : "bg-slate-800 text-slate-400"
+                    }`}>
+                      By: {decision.decided_by}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-300">Reason: {decision.reason || "None specified"}</p>
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span>Score: {decision.final_score ? `${Number(decision.final_score) * 100}%` : "N/A"}</span>
+                    <span>{new Date(decision.created_at).toLocaleString()}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {filteredReports.length === 0 ? (
+              <Card className="p-8 text-center border-slate-800 bg-slate-950/80">
+                <p className="text-slate-400">No reports found.</p>
+              </Card>
+            ) : (
+              filteredReports.map((report) => (
+                <div key={report.id} className="rounded-3xl border border-slate-800/80 bg-slate-900/40 p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-semibold text-white">{report.title}</p>
+                      <p className="text-sm text-slate-400">{report.address}</p>
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-400">
-                      <span className="px-2 py-1 bg-slate-800 rounded text-slate-300">
-                        {report.status.replace("_", " ")}
-                      </span>
-                      <span className={`px-2 py-1 rounded ${
-                        report.severity === "high"
-                          ? "bg-red-900/30 text-red-300"
-                          : report.severity === "medium"
-                          ? "bg-yellow-900/30 text-yellow-300"
-                          : "bg-blue-900/30 text-blue-300"
-                      }`}>
-                        Severity: {report.severity ?? "medium"}
-                      </span>
-                      <span>{new Date(report.created_at).toLocaleDateString()}</span>
+                    <div className="flex flex-wrap gap-2">
+                      {report.status === "open" && (
+                        <Button size="sm" onClick={() => handleAction(report, "in_progress")}>
+                          Verify / Process
+                        </Button>
+                      )}
+                      {report.status === "in_progress" && (
+                        <Button size="sm" onClick={() => handleAction(report, "resolved")}>
+                          Mark Resolved
+                        </Button>
+                      )}
+                      {report.status !== "resolved" && (
+                        <Button size="sm" variant="ghost" onClick={() => handleAction(report, "resolved")}>
+                          Resolve
+                        </Button>
+                      )}
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+                  
+                  {report.description && (
+                    <p className="mt-3 text-sm text-slate-300 border-l-2 border-slate-700 pl-3 py-1">
+                      {report.description}
+                    </p>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap gap-3 text-sm text-slate-400">
+                    <span className="px-2 py-1 bg-slate-800 rounded text-slate-300">
+                      Status: {report.status.replace("_", " ")}
+                    </span>
+                    <span className={`px-2 py-1 rounded ${
+                      report.severity === "high"
+                        ? "bg-red-900/30 text-red-300"
+                        : report.severity === "medium"
+                        ? "bg-yellow-900/30 text-yellow-300"
+                        : "bg-blue-900/30 text-blue-300"
+                    }`}>
+                      Severity: {report.severity ?? "medium"}
+                    </span>
+                    <span>Reported: {new Date(report.created_at).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
-        </div>
+        )}
       </main>
     </div>
   );

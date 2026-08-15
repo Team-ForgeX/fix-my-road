@@ -7,12 +7,6 @@ const nextConfig = {
         hostname: "images.unsplash.com"
       }
     ]
-  },
-  webpack: (config, { dev }) => {
-    if (dev) {
-      config.cache = false;
-    }
-    return config;
   }
 };
 

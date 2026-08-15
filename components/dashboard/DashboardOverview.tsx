@@ -18,6 +18,11 @@ export function DashboardOverview() {
     if (!ready) return;
     if (!user) {
       router.replace("/login");
+      return;
+    }
+    // Redirect admins to their panel
+    if (user.role === "admin") {
+      router.replace("/admin");
     }
   }, [ready, router, user]);
 

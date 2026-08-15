@@ -29,34 +29,37 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  // Refresh session cookies (required by Supabase SSR)
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
 
-  // Protect client authenticated routes
+  // Routes that require the user to be logged in
   const isAuthRoute = ["/dashboard", "/profile", "/report", "/reports", "/nearby", "/notifications"].some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   );
 
   const isAdminRoute = pathname === "/admin" || pathname.startsWith("/admin/");
+
+  // Redirect logged-in verified users away from guest-only pages
   const isGuestOnlyRoute = pathname === "/login" || pathname === "/signup";
 
-  const { data: profile } = user
-    ? await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle()
-    : { data: null };
-
   if (isGuestOnlyRoute && user && user.email_confirmed_at) {
+    // Fetch role only when needed for this redirect
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
     const url = request.nextUrl.clone();
     url.pathname = profile?.role === "admin" ? "/admin" : "/dashboard";
     return NextResponse.redirect(url);
   }
 
+  // Protect authenticated routes — redirect to login if not signed in
   if (isAuthRoute || isAdminRoute) {
     if (!user) {
       const url = request.nextUrl.clone();
@@ -70,19 +73,23 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (isAdminRoute && profile?.role !== "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
-      return NextResponse.redirect(url);
-    }
+    // For admin routes only, verify the role in the DB
+    if (isAdminRoute) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
 
-    if (!isAdminRoute && profile?.role === "admin") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/admin";
-      return NextResponse.redirect(url);
+      if (profile?.role !== "admin") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
     }
+    // Note: we deliberately do NOT redirect admins away from client routes.
+    // The client-side AuthContext shows the correct UI based on role.
   }
 
-
   return supabaseResponse;
-}
+}

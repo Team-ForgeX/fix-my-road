@@ -67,17 +67,27 @@ function VerifyPageContent() {
         .maybeSingle();
 
       if (!profile) {
-        const fullName = user.user_metadata?.full_name || "User";
-        const phone = user.user_metadata?.phone || null;
-        await supabase.from("profiles").insert({
-          id: user.id,
-          full_name: fullName,
-          phone: phone,
-          role: "client"
-        });
+        // Create profile — use signup metadata role so admins who signed up with admin code get admin role
+        const fullName = (user.user_metadata?.full_name as string) || "User";
+        const phone = (user.user_metadata?.phone as string) || null;
+        const signupRole =
+          user.user_metadata?.role === "admin" || user.user_metadata?.requested_role === "admin"
+            ? "admin"
+            : "client";
+
+        await supabase.from("profiles").upsert(
+          {
+            id: user.id,
+            email: user.email ?? null,
+            full_name: fullName,
+            phone: phone,
+            role: signupRole
+          },
+          { onConflict: "id" }
+        );
       }
 
-      const userRole = profile?.role || "client";
+      const userRole = profile?.role || (user.user_metadata?.role === "admin" ? "admin" : "client");
       setMessage("Your account is ready! Redirecting...");
       setChecking(false);
 
@@ -163,8 +173,25 @@ function VerifyPageContent() {
           )}
 
           {isVerified && (
-            <Button type="button" className="w-full" onClick={() => router.push("/dashboard")}>
-              Continue to dashboard
+            <Button
+              type="button"
+              className="w-full"
+              onClick={async () => {
+                // Re-fetch role from DB before navigating
+                const { data } = await supabase.auth.getUser();
+                if (data?.user) {
+                  const { data: profile } = await supabase
+                    .from("profiles")
+                    .select("role")
+                    .eq("id", data.user.id)
+                    .maybeSingle();
+                  router.push(profile?.role === "admin" ? "/admin" : "/dashboard");
+                } else {
+                  router.push("/dashboard");
+                }
+              }}
+            >
+              Continue to my dashboard
             </Button>
           )}
         </Card>

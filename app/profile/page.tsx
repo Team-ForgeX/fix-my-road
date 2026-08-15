@@ -36,6 +36,7 @@ export default function ProfilePage() {
       }
       setAdminCode("");
       setShowElevateForm(false);
+      router.push("/admin");
     } finally {
       setIsLoading(false);
     }
@@ -51,6 +52,7 @@ export default function ProfilePage() {
         setError(result.error ?? "Could not switch account to client.");
         return;
       }
+      router.push("/dashboard");
     } finally {
       setIsLoading(false);
     }
@@ -126,8 +128,8 @@ export default function ProfilePage() {
                 )}
                 <Button
                   variant="secondary"
-                  onClick={() => {
-                    logout();
+                  onClick={async () => {
+                    await logout();
                     router.push("/");
                   }}
                 >

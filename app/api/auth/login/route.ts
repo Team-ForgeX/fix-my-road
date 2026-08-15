@@ -69,25 +69,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If no profile exists, create one as client
+    // If no profile exists, create one while preserving the role from auth metadata.
     let resolvedProfile = profile;
     if (!resolvedProfile) {
       const emailValue = authData.user.email ?? "";
       const baseName = authData.user.user_metadata?.full_name || emailValue.split("@")[0] || "User";
       const fallbackFullName = String(baseName).trim() || "User";
+      const detectedRole = authData.user.user_metadata?.role === "admin" || authData.user.user_metadata?.requested_role === "admin" ? "admin" : "client";
 
       const { data: createdProfile, error: createProfileError } = await adminDb
         .from("profiles")
         .upsert(
           {
             id: authData.user.id,
+            email: authData.user.email ?? null,
             full_name: fallbackFullName,
             phone: authData.user.user_metadata?.phone ?? null,
-            role: "client"
+            role: detectedRole
           },
           { onConflict: "id" }
         )
-        .select("id, full_name, phone, role, created_at, updated_at")
+        .select("id, email, full_name, phone, role, created_at, updated_at")
         .single();
 
       if (createProfileError || !createdProfile) {

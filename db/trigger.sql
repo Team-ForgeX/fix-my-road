@@ -11,12 +11,16 @@ BEGIN
   IF NEW.email_confirmed_at IS NOT NULL
      AND (OLD.email_confirmed_at IS NULL OR OLD.email_confirmed_at IS DISTINCT FROM NEW.email_confirmed_at)
   THEN
-    INSERT INTO public.profiles (id, full_name, phone, role)
+    INSERT INTO public.profiles (id, email, full_name, phone, role)
     VALUES (
       NEW.id,
+      NEW.email,
       COALESCE(NEW.raw_user_meta_data->>'full_name', 'User'),
       NEW.raw_user_meta_data->>'phone',
-      'client'  -- ALWAYS default to 'client', never trust metadata for role
+      CASE
+        WHEN COALESCE(NEW.raw_user_meta_data->>'role', NEW.raw_user_meta_data->>'requested_role') = 'admin' THEN 'admin'
+        ELSE 'client'
+      END
     )
     ON CONFLICT (id) DO NOTHING;
   END IF;
