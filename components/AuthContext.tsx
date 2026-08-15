@@ -308,16 +308,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setReports(initialReports());
     setNotifications(initialNotifications());
 
-    // 1. First, get the current session so we know auth state before rendering
+    // 1. First, get the authenticated user so we know auth state before rendering
     const initAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
 
       if (!mounted) return;
 
-      if (session?.user) {
-        await resolveAndSetUser(session.user);
+      if (currentUser) {
+        await resolveAndSetUser(currentUser);
       } else {
-        // No session — user is logged out
+        // No authenticated user — user is logged out
         setUser(null);
       }
 

@@ -604,3 +604,10 @@ CREATE POLICY "Users can update own preferences"
 ON public.user_preferences FOR UPDATE TO authenticated
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
+
+-- ------------------------------------------------------------
+-- 7. TABLE PERMISSIONS (GRANTS)
+-- ------------------------------------------------------------
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, anon;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, anon;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO authenticated, anon;

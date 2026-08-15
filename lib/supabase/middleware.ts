@@ -29,11 +29,10 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresh session cookies locally (fast, non-blocking)
+  // Authenticate user via Supabase Auth server
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  const user = session?.user;
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
 
