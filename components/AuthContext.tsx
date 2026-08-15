@@ -24,6 +24,8 @@ type LocationPayload = {
   city: string;
   state: string;
   pincode: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type AppNotification = {
@@ -469,13 +471,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Complete identity verification before submitting reports." };
     }
 
+    const reportLat = location.latitude ?? (28.6139 + Math.random() * 0.01);
+    const reportLng = location.longitude ?? (77.2090 + Math.random() * 0.01);
+
     const supaResult = await submitReportToSupabase({
       userId: user.id,
       title,
       description: description.trim(),
       problemType,
-      latitude: 28.6139 + Math.random() * 0.01,
-      longitude: 77.2090 + Math.random() * 0.01,
+      latitude: reportLat,
+      longitude: reportLng,
       address: location.address,
       landmark: location.landmark,
       city: location.city,
@@ -494,8 +499,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       incident_id: undefined,
       title: title.trim() || description.trim().slice(0, 45),
       description: description.trim(),
-      latitude: 28.6139 + Math.random() * 0.01,
-      longitude: 77.2090 + Math.random() * 0.01,
+      latitude: reportLat,
+      longitude: reportLng,
       address: location.address,
       landmark: location.landmark,
       locality: location.city || location.pincode || "Unknown",
