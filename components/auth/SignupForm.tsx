@@ -71,19 +71,10 @@ export function SignupForm() {
         email,
         phone,
         password,
-        admin_code: adminCode || undefined
       });
 
       if (!result.success) {
         setError(result.error ?? "Unable to create account.");
-        setIsLoading(false);
-        return;
-      }
-
-      if (result.needsEmailVerification) {
-        setEmailVerificationSent(true);
-        setSignupEmail(email);
-        setError(null);
         setIsLoading(false);
         return;
       }

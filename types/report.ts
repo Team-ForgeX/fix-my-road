@@ -18,6 +18,7 @@ export type Report = {
   id: string;
   user_id: string;
   incident_id?: string;
+  duplicate_of_report_id?: string;
   title: string;
   description: string;
   latitude: number;

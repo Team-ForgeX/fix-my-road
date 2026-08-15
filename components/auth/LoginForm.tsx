@@ -70,13 +70,10 @@ export function LoginForm() {
         return;
       }
 
-      if (result.user) {
-        if (!result.user.verified) {
-          window.location.href = "/verify";
-        } else {
-          window.location.href = result.user.role === "admin" ? "/admin" : "/dashboard";
-        }
+      if (result.needsVerification) {
+        window.location.href = "/verify";
       }
+      // If login successful and verified, the useEffect will handle the redirect
     } catch (err) {
       setError("An unexpected error occurred.");
       setIsLoading(false);
