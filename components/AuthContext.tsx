@@ -24,6 +24,8 @@ type LocationPayload = {
   city: string;
   state: string;
   pincode: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type AppNotification = {
@@ -562,13 +564,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Complete identity verification before submitting reports." };
     }
 
+    const reportLat = location.latitude ?? (28.6139 + Math.random() * 0.01);
+    const reportLng = location.longitude ?? (77.2090 + Math.random() * 0.01);
+
     const supaResult = await submitReportToSupabase({
       userId: user.id,
       title,
       description: description.trim(),
       problemType,
-      latitude: 28.6139 + Math.random() * 0.01,
-      longitude: 77.2090 + Math.random() * 0.01,
+      latitude: reportLat,
+      longitude: reportLng,
       address: location.address,
       landmark: location.landmark,
       city: location.city,
@@ -586,7 +591,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 1. Create client notification in database
     await supabase.from("notifications").insert({
       user_id: user.id,
+<<<<<<< HEAD
       report_id: supaResult?.reportId,
+=======
+      incident_id: undefined,
+      title: title.trim() || description.trim().slice(0, 45),
+      description: description.trim(),
+      latitude: reportLat,
+      longitude: reportLng,
+      address: location.address,
+      landmark: location.landmark,
+      locality: location.city || location.pincode || "Unknown",
+      city: location.city,
+      created_at: new Date().toISOString(),
+      processing_state: "submitted",
+      status: "open",
+      severity: pickSeverity(description),
+      report_count: 1,
+      is_duplicate: false,
+      media: thumbnailEntries
+    };
+
+    // Create notification for citizen
+    const clientNotification: AppNotification = {
+      id: `N${Date.now()}`,
+      type: "report_submitted",
+>>>>>>> f9541d09befb091c6056e91c530b8ae008043614
       title: "Report Submitted",
       message: `Your report "${title.trim()}" has been submitted and is awaiting verification.`
     });

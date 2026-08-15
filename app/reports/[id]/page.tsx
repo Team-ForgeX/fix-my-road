@@ -8,6 +8,16 @@ import { ReportTimeline } from "../../../components/report/ReportTimeline";
 import { useAuth } from "../../../components/AuthContext";
 import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
+import dynamic from "next/dynamic";
+
+const ReportLeafletMap = dynamic(() => import("../../../components/map/ReportLeafletMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-64 w-full items-center justify-center rounded-2xl bg-slate-900 text-sm text-slate-400">
+      Loading map...
+    </div>
+  )
+});
 
 export default function ReportDetailsPage() {
   const params = useParams();
@@ -80,14 +90,23 @@ export default function ReportDetailsPage() {
                   )}
                 </div>
               </div>
-              <div className="rounded-3xl border border-slate-800/80 bg-slate-950/80 p-6">
-                <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Location</p>
-                <div className="mt-4 space-y-3 text-sm text-slate-300">
-                  <p>{report.address}</p>
-                  {report.landmark ? <p>Landmark: {report.landmark}</p> : null}
-                  <p>{report.locality}, {report.city}</p>
-                  <p>Coordinates: {report.latitude.toFixed(4)}, {report.longitude.toFixed(4)}</p>
+              <div className="rounded-3xl border border-slate-800/80 bg-slate-950/80 p-6 space-y-4">
+                <p className="text-sm uppercase tracking-[0.28em] text-slate-500">Location & Leaflet Map</p>
+                <div className="space-y-1.5 text-sm text-slate-300">
+                  <p className="font-medium text-white">{report.address}</p>
+                  {report.landmark ? <p className="text-slate-400">Landmark: {report.landmark}</p> : null}
+                  <p className="text-slate-400">{report.locality}, {report.city}</p>
+                  <p className="text-xs text-teal-300 font-mono">
+                    GPS Coordinates: {report.latitude.toFixed(5)}, {report.longitude.toFixed(5)}
+                  </p>
                 </div>
+                <ReportLeafletMap
+                  latitude={report.latitude}
+                  longitude={report.longitude}
+                  title={report.title}
+                  address={report.address}
+                  className="h-64 w-full"
+                />
               </div>
             </div>
 
