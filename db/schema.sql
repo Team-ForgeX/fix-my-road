@@ -326,6 +326,106 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
+-- Multi-Factor Report Deduplication & Incident Aggregation Function
+CREATE OR REPLACE FUNCTION process_report_deduplication(
+  p_report_id UUID,
+  p_radius_meters DOUBLE PRECISION DEFAULT 500.0
+)
+RETURNS UUID AS $$
+DECLARE
+  v_report RECORD;
+  v_matching_incident_id UUID;
+  v_new_incident_id UUID;
+BEGIN
+  SELECT * INTO v_report FROM reports WHERE id = p_report_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Report % not found', p_report_id;
+  END IF;
+
+  -- Search for existing active incident matching problem_type, locality/city or geographical proximity
+  SELECT id INTO v_matching_incident_id
+  FROM incidents
+  WHERE status IN ('open', 'assigned', 'in_progress')
+    AND (
+      (
+        LOWER(COALESCE(problem_type, 'general')) = LOWER(COALESCE(v_report.problem_type, 'general'))
+        AND (
+          (v_report.locality IS NOT NULL AND LOWER(COALESCE(locality, '')) = LOWER(v_report.locality)) OR
+          (v_report.city IS NOT NULL AND LOWER(COALESCE(city, '')) = LOWER(v_report.city)) OR
+          haversine_distance_meters(latitude, longitude, v_report.latitude, v_report.longitude) <= p_radius_meters
+        )
+      )
+      OR
+      haversine_distance_meters(latitude, longitude, v_report.latitude, v_report.longitude) <= p_radius_meters
+    )
+  ORDER BY 
+    CASE WHEN LOWER(COALESCE(problem_type, 'general')) = LOWER(COALESCE(v_report.problem_type, 'general')) THEN 0 ELSE 1 END,
+    haversine_distance_meters(latitude, longitude, v_report.latitude, v_report.longitude) ASC
+  LIMIT 1;
+
+  IF v_matching_incident_id IS NOT NULL THEN
+    -- Link duplicate report to existing incident
+    UPDATE reports 
+    SET incident_id = v_matching_incident_id,
+        is_duplicate = TRUE,
+        processing_state = 'linked',
+        updated_at = now()
+    WHERE id = p_report_id;
+
+    UPDATE incidents
+    SET report_count = report_count + 1,
+        last_reported_at = now(),
+        severity = CASE 
+          WHEN v_report.severity = 'critical' THEN 'critical'
+          WHEN v_report.severity = 'high' AND severity IN ('low', 'medium') THEN 'high'
+          WHEN v_report.severity = 'medium' AND severity = 'low' THEN 'medium'
+          ELSE severity
+        END,
+        updated_at = now()
+    WHERE id = v_matching_incident_id;
+
+    INSERT INTO dedupe_decisions (
+      report_id, matched_incident_id, decision, decided_by, reason
+    ) VALUES (
+      p_report_id, v_matching_incident_id, 'linked', 'system', 'Linked via multi-factor category/locality/proximity matching'
+    );
+
+    RETURN v_matching_incident_id;
+  ELSE
+    -- Create new aggregated incident
+    INSERT INTO incidents (
+      title, problem_type, severity, status, description,
+      latitude, longitude, address, landmark, locality, ward, city, district, state, pincode,
+      report_count, first_reported_at, last_reported_at
+    ) VALUES (
+      COALESCE(v_report.address, 'Reported Issue'),
+      COALESCE(v_report.problem_type, 'general'),
+      COALESCE(v_report.severity, 'medium'),
+      'open',
+      v_report.description,
+      v_report.latitude, v_report.longitude,
+      v_report.address, v_report.landmark, v_report.locality, v_report.ward, v_report.city, v_report.district, v_report.state, v_report.pincode,
+      1, v_report.created_at, v_report.created_at
+    ) RETURNING id INTO v_new_incident_id;
+
+    UPDATE reports 
+    SET incident_id = v_new_incident_id,
+        is_duplicate = FALSE,
+        processing_state = 'processed',
+        updated_at = now()
+    WHERE id = p_report_id;
+
+    INSERT INTO dedupe_decisions (
+      report_id, matched_incident_id, decision, decided_by, reason
+    ) VALUES (
+      p_report_id, v_new_incident_id, 'new', 'system', 'Created new incident'
+    );
+
+    RETURN v_new_incident_id;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+
 -- ------------------------------------------------------------
 -- 6. ROW LEVEL SECURITY (RLS) POLICIES
 -- ------------------------------------------------------------

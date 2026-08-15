@@ -1,9 +1,13 @@
-import { supabase } from "./supabaseClient";
-import { analyzeReport } from "./ml/analyzeReport";
-import type { Report, ReportStatus } from "../types/report";
-import type { UserProfile } from "../types/user";
+import { createClient } from "@supabase/supabase-js";
+import type { ReportStatus } from "../types/report";
 
-export { supabase };
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+export const supabase = createClient(
+  supabaseUrl || "https://placeholder.supabase.co",
+  supabaseAnonKey || "placeholder-key"
+);
 
 export type SaveReportPayload = {
   userId: string;
@@ -29,34 +33,27 @@ export type AdminActionPayload = {
   note?: string;
 };
 
-type SupabaseFallbackResult = {
-  success: false;
-  error: string;
-  isFallback?: true;
+export type SubmitReportResult = {
+  success: boolean;
+  reportId?: string;
+  incidentId?: string | null;
+  message?: string;
+  error?: string;
+  isFallback?: boolean;
 };
 
-type SubmitReportSuccess = {
-  success: true;
-  reportId: string;
-  incidentId: string | null;
-  message: string;
-  isFallback?: true;
+export type ExecuteAdminActionResult = {
+  success: boolean;
+  error?: string;
+  isFallback?: boolean;
 };
-
-type AdminActionSuccess = {
-  success: true;
-  isFallback?: true;
-};
-
-export type SubmitReportResult = SubmitReportSuccess | SupabaseFallbackResult | { success: false; error: string; isFallback?: true };
-export type ExecuteAdminActionResult = AdminActionSuccess | SupabaseFallbackResult | { success: false; error: string; isFallback?: true };
 
 export async function fetchUserProfile(userId: string) {
   return supabase
     .from("profiles")
     .select("id, email, full_name, role, phone, created_at, updated_at")
     .eq("id", userId)
-    .maybeSingle<UserProfile>();
+    .maybeSingle();
 }
 
 export async function createCitizenProfile(profile: {
@@ -83,41 +80,50 @@ export async function createCitizenProfile(profile: {
     .single();
 }
 
-export async function updateIdentityVerification(userId: string, verified: boolean) {
-  return supabase
-    .from("profiles")
-    .update({ identity_verified: verified, updated_at: new Date().toISOString() })
-    .eq("id", userId)
-    .select("id, identity_verified")
-    .single();
-}
-
 /**
  * Submits a new citizen report into Supabase.
  * Uploads media files to 'report-media' bucket and calls process_report_deduplication RPC.
  */
-export async function submitReportToSupabase(payload: SaveReportPayload): Promise<SubmitReportResult> {
+export async function submitReportToSupabase(payload: SaveReportPayload) {
   try {
-    // 1. Run ML classification analysis on the report details
-    const mlResult = await analyzeReport({
-      reportId: `R${Date.now()}`,
-      description: payload.description,
-      imageUrls: [],
-      latitude: payload.latitude,
-      longitude: payload.longitude
-    });
+    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes("placeholder")) {
+      return {
+        success: false,
+        error: "Supabase credentials not configured."
+      };
+    }
 
-    const detectedProblemType = payload.problemType || mlResult.problem_type || "general";
-    const detectedSeverity = payload.severity || mlResult.severity || "medium";
+    // 1. Ensure profile exists in public.profiles table to prevent foreign key violation
+    const { data: existingProfile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", payload.userId)
+      .maybeSingle();
 
-    // 2. Insert into reports table with ML analysis results
+    if (!existingProfile) {
+      const { data: authUser } = await supabase.auth.getUser();
+      if (authUser?.user) {
+        await supabase.from("profiles").upsert(
+          {
+            id: authUser.user.id,
+            email: authUser.user.email || null,
+            full_name: (authUser.user.user_metadata?.full_name as string) || authUser.user.email?.split("@")[0] || "User",
+            phone: (authUser.user.user_metadata?.phone as string) || null,
+            role: (authUser.user.user_metadata?.requested_role as string) === "admin" ? "admin" : "client"
+          },
+          { onConflict: "id" }
+        );
+      }
+    }
+
+    // 2. Insert into reports table
     const { data: report, error: reportError } = await supabase
       .from("reports")
       .insert({
         user_id: payload.userId,
         description: payload.description,
-        problem_type: detectedProblemType,
-        severity: detectedSeverity,
+        problem_type: payload.problemType || "general",
+        severity: payload.severity || "medium",
         latitude: payload.latitude,
         longitude: payload.longitude,
         address: payload.address,
@@ -125,13 +131,13 @@ export async function submitReportToSupabase(payload: SaveReportPayload): Promis
         city: payload.city || null,
         pincode: payload.pincode || null,
         source_type: "web",
-        processing_state: "pending",
-        ml_analysis: mlResult as any
+        processing_state: "pending"
       })
       .select()
       .single();
 
     if (reportError || !report) {
+      console.error("Supabase report insert error:", reportError);
       throw new Error(reportError?.message || "Failed to create report record.");
     }
 
@@ -163,7 +169,7 @@ export async function submitReportToSupabase(payload: SaveReportPayload): Promis
       }
     }
 
-    // 4. Trigger smart multi-factor deduplication PL/pgSQL function
+    // 4. Trigger smart deduplication function if present
     let incidentId: string | null = null;
     const { data: dedupeResult, error: dedupeErr } = await supabase.rpc(
       "process_report_deduplication",
@@ -181,17 +187,23 @@ export async function submitReportToSupabase(payload: SaveReportPayload): Promis
       message: "Report submitted and processed successfully."
     };
   } catch (err: any) {
-    console.warn("Supabase report submission error, falling back:", err?.message);
-    return { success: false, error: err?.message || "Error communicating with Supabase." };
+    console.warn("Supabase report submission error:", err?.message);
+    return {
+      success: false,
+      error: err?.message || "Error communicating with Supabase."
+    };
   }
 }
 
 /**
  * Process admin state update on an incident in Supabase.
  */
-export async function executeAdminAction(payload: AdminActionPayload): Promise<ExecuteAdminActionResult> {
+export async function executeAdminAction(payload: AdminActionPayload) {
   try {
-    // 1. Fetch existing incident state
+    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes("placeholder")) {
+      return { success: false };
+    }
+
     const { data: currentIncident, error: fetchErr } = await supabase
       .from("incidents")
       .select("status")
@@ -202,15 +214,16 @@ export async function executeAdminAction(payload: AdminActionPayload): Promise<E
       throw new Error(fetchErr?.message || "Incident not found");
     }
 
-    // 2. Update status
     const { error: updateErr } = await supabase
       .from("incidents")
-      .update({ status: payload.newStatus, updated_at: new Date().toISOString() })
+      .update({
+        status: payload.newStatus,
+        updated_at: new Date().toISOString()
+      })
       .eq("id", payload.incidentId);
 
     if (updateErr) throw updateErr;
 
-    // 3. Insert assignment if department provided
     if (payload.departmentId) {
       await supabase.from("incident_assignments").insert({
         incident_id: payload.incidentId,
@@ -221,7 +234,6 @@ export async function executeAdminAction(payload: AdminActionPayload): Promise<E
       });
     }
 
-    // 4. Log status history audit
     await supabase.from("incident_status_history").insert({
       incident_id: payload.incidentId,
       old_status: currentIncident.status,
@@ -230,7 +242,6 @@ export async function executeAdminAction(payload: AdminActionPayload): Promise<E
       note: payload.note || `Status changed from ${currentIncident.status} to ${payload.newStatus}`
     });
 
-    // 5. Create user notifications for citizens who reported this incident
     const { data: linkedReports } = await supabase
       .from("reports")
       .select("user_id, id")
@@ -241,9 +252,10 @@ export async function executeAdminAction(payload: AdminActionPayload): Promise<E
         user_id: r.user_id,
         report_id: r.id,
         incident_id: payload.incidentId,
-        title: `Issue Status Updated`,
+        title: "Issue Status Updated",
         message: `Your reported issue status has been updated to "${payload.newStatus.replace("_", " ")}".`
       }));
+
       await supabase.from("notifications").insert(notifs);
     }
 

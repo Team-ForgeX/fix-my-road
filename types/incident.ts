@@ -1,9 +1,12 @@
+export type IncidentSeverity = "low" | "medium" | "high";
+export type IncidentStatus = "open" | "assigned" | "in_progress" | "resolved";
+
 export type Incident = {
   id: string;
   title: string;
   problem_type: string;
-  severity: "low" | "medium" | "high";
-  status: "open" | "assigned" | "in_progress" | "resolved";
+  severity: IncidentSeverity;
+  status: IncidentStatus;
   description: string;
   latitude: number;
   longitude: number;

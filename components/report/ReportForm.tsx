@@ -48,7 +48,7 @@ export function ReportForm() {
     if (validationErrors.length > 0) return;
 
     setSubmitting(true);
-    const result = await saveReport({ title, description, mediaFiles, location, problemType });
+    const result = await saveReport({ title, description, problemType, mediaFiles, location });
     setSubmitting(false);
 
     if (!result.success) {
@@ -56,11 +56,7 @@ export function ReportForm() {
       return;
     }
 
-    setDedupeMessage(
-      result.dedupeDecision === "linked"
-        ? "Your report matched and was linked to an existing nearby incident (report count incremented)."
-        : "A new incident was registered from your report."
-    );
+    setDedupeMessage("A new incident was registered from your report.");
     setSubmitted(true);
   };
 

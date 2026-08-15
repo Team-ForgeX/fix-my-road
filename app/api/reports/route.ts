@@ -104,8 +104,9 @@ export async function POST(request: Request) {
       mediaFiles
     });
 
-    if (!result.success && !result.isFallback) {
-      return NextResponse.json({ success: false, error: result.error }, { status: 400 });
+    const res = result as any;
+    if (!res.success && !res.isFallback) {
+      return NextResponse.json({ success: false, error: res.error }, { status: 400 });
     }
 
     return NextResponse.json(result);
