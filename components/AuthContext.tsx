@@ -588,14 +588,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: supaResult?.error || "Failed to submit report." };
     }
 
-    // 1. Create client notification in database
-    await supabase.from("notifications").insert({
+    const thumbnailEntries = mediaFiles && mediaFiles.length > 0
+      ? await createMediaItems(mediaFiles, supaResult?.reportId || String(Date.now()))
+      : [];
+
+    const newReport: Report = {
+      id: supaResult?.reportId || `R${Date.now()}`,
       user_id: user.id,
-<<<<<<< HEAD
-      report_id: supaResult?.reportId,
-=======
-      incident_id: undefined,
-      title: title.trim() || description.trim().slice(0, 45),
+      incident_id: supaResult && "incidentId" in supaResult ? supaResult.incidentId || undefined : undefined,
+      title: title.trim() || description.trim().slice(0, 45) || "Road Issue",
       description: description.trim(),
       latitude: reportLat,
       longitude: reportLng,
@@ -616,9 +617,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const clientNotification: AppNotification = {
       id: `N${Date.now()}`,
       type: "report_submitted",
->>>>>>> f9541d09befb091c6056e91c530b8ae008043614
       title: "Report Submitted",
-      message: `Your report "${title.trim()}" has been submitted and is awaiting verification.`
+      message: `Your report "${newReport.title}" has been submitted and is awaiting verification.`,
+      priority: pickSeverity(description),
+      timestamp: new Date().toISOString(),
+      read: false,
+      reportId: newReport.id
+    };
+
+    // 1. Create client notification in database
+    await supabase.from("notifications").insert({
+      user_id: user.id,
+      report_id: newReport.id,
+      title: clientNotification.title,
+      message: clientNotification.message
     });
 
     // 2. Fetch admin profiles to notify them

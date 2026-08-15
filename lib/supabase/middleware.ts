@@ -29,10 +29,11 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresh session cookies (required by Supabase SSR)
+  // Refresh session cookies locally (fast, non-blocking)
   const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    data: { session },
+  } = await supabase.auth.getSession();
+  const user = session?.user;
 
   const pathname = request.nextUrl.pathname;
 

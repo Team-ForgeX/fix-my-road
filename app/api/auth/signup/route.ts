@@ -34,21 +34,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Determine role: if admin code provided and valid, they become admin; otherwise client
+    // Determine role: validate admin access code via database RPC function
     let requestedRole: "client" | "admin" = "client";
+    const supabase = createClient();
+
     if (adminCode) {
-      const envAdminCode = process.env.ADMIN_CODE;
-      // If admin code matches, assign admin role; otherwise default to client
-      if (envAdminCode && adminCode.toLowerCase() === envAdminCode.trim().toLowerCase()) {
+      const { data: isValidCode } = await supabase.rpc("validate_admin_signup_code", {
+        p_code: adminCode
+      });
+
+      if (isValidCode) {
         requestedRole = "admin";
       } else {
-        // Invalid admin code – proceed as client
-        requestedRole = "client";
-        // Optionally, you could log a warning or include a non‑blocking message
+        // Fallback: check environment variable if RPC function not initialized yet
+        const envAdminCode = process.env.ADMIN_CODE;
+        if (envAdminCode && adminCode.toLowerCase() === envAdminCode.trim().toLowerCase()) {
+          requestedRole = "admin";
+        }
       }
     }
 
-    const supabase = createClient();
     const origin = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
 
     const { data: authData, error: authError } = await supabase.auth.signUp({

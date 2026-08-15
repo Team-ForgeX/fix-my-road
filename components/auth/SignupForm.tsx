@@ -123,23 +123,30 @@ export function SignupForm() {
               </div>
             </div>
 
-            <Button
-              type="button"
-              variant="ghost"
-              className="w-full"
-              onClick={() => {
-                setEmailVerificationSent(false);
-                setFullName("");
-                setEmail("");
-                setPhone("");
-                setPassword("");
-                setConfirmPassword("");
-                setAdminCode("");
-                setError(null);
-              }}
-            >
-              Back to signup
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link href="/login" className="flex-1">
+                <Button type="button" className="w-full">
+                  Go to Login Page
+                </Button>
+              </Link>
+              <Button
+                type="button"
+                variant="ghost"
+                className="flex-1"
+                onClick={() => {
+                  setEmailVerificationSent(false);
+                  setFullName("");
+                  setEmail("");
+                  setPhone("");
+                  setPassword("");
+                  setConfirmPassword("");
+                  setAdminCode("");
+                  setError(null);
+                }}
+              >
+                Back to signup
+              </Button>
+            </div>
           </Card>
         </main>
       </div>

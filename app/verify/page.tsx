@@ -58,7 +58,7 @@ function VerifyPageContent() {
     setIsVerified(confirmed);
 
     if (confirmed) {
-      setMessage("Your email is verified! Setting up your profile...");
+      setMessage("Email verified successfully. Setting up your workspace...");
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -66,29 +66,8 @@ function VerifyPageContent() {
         .eq("id", user.id)
         .maybeSingle();
 
-      if (!profile) {
-        // Create profile — use signup metadata role so admins who signed up with admin code get admin role
-        const fullName = (user.user_metadata?.full_name as string) || "User";
-        const phone = (user.user_metadata?.phone as string) || null;
-        const signupRole =
-          user.user_metadata?.role === "admin" || user.user_metadata?.requested_role === "admin"
-            ? "admin"
-            : "client";
-
-        await supabase.from("profiles").upsert(
-          {
-            id: user.id,
-            email: user.email ?? null,
-            full_name: fullName,
-            phone: phone,
-            role: signupRole
-          },
-          { onConflict: "id" }
-        );
-      }
-
-      const userRole = profile?.role || (user.user_metadata?.role === "admin" ? "admin" : "client");
-      setMessage("Your account is ready! Redirecting...");
+      const userRole = profile?.role || (user.user_metadata?.requested_role === "admin" || user.user_metadata?.role === "admin" ? "admin" : "client");
+      setMessage("Email verified successfully! Redirecting...");
       setChecking(false);
 
       setTimeout(() => {

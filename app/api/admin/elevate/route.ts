@@ -54,43 +54,49 @@ export async function POST(request: Request) {
       );
     }
 
-    const adminCode = process.env.ADMIN_CODE;
-    if (!adminCode) {
-      console.error("ADMIN_CODE environment variable not configured");
-      return NextResponse.json(
-        { success: false, error: "Admin access system not configured." },
-        { status: 500 }
-      );
-    }
-
-    if (code.trim().toLowerCase() !== adminCode.trim().toLowerCase()) {
-      return NextResponse.json(
-        { success: false, error: "Invalid admin access code." },
-        { status: 401 }
-      );
-    }
-
-    const adminDb = createAdminClient();
-    const { data: profile, error: profileError } = await adminDb
-      .from("profiles")
-      .update({ role: "admin", updated_at: new Date().toISOString() })
-      .eq("id", user.id)
-      .select("id, full_name, role")
-      .single();
-
-    if (profileError || !profile) {
-      console.error("Profile elevate error:", profileError?.message);
-      return NextResponse.json(
-        { success: false, error: profileError?.message ?? "Unable to update account privileges." },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: "Account elevated to admin successfully.",
-      user: profile
+    // Call RPC function upgrade_to_admin
+    const { data: upgraded, error: rpcError } = await supabase.rpc("upgrade_to_admin", {
+      p_code: code.trim()
     });
+
+    if (!rpcError && upgraded) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, full_name, role")
+        .eq("id", user.id)
+        .single();
+
+      return NextResponse.json({
+        success: true,
+        message: "Account elevated to admin successfully.",
+        user: profile
+      });
+    }
+
+    // Fallback: check environment variable if RPC function not initialized in DB yet
+    const adminCode = process.env.ADMIN_CODE;
+    if (adminCode && code.trim().toLowerCase() === adminCode.trim().toLowerCase()) {
+      const adminDb = createAdminClient();
+      const { data: profile, error: profileError } = await adminDb
+        .from("profiles")
+        .update({ role: "admin", updated_at: new Date().toISOString() })
+        .eq("id", user.id)
+        .select("id, full_name, role")
+        .single();
+
+      if (!profileError && profile) {
+        return NextResponse.json({
+          success: true,
+          message: "Account elevated to admin successfully.",
+          user: profile
+        });
+      }
+    }
+
+    return NextResponse.json(
+      { success: false, error: "Invalid admin access code." },
+      { status: 401 }
+    );
   } catch (err: any) {
     console.error("Admin code verification error:", err);
     return NextResponse.json(
