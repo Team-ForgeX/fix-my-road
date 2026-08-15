@@ -331,7 +331,10 @@ CREATE OR REPLACE FUNCTION process_report_deduplication(
   p_report_id UUID,
   p_radius_meters DOUBLE PRECISION DEFAULT 500.0
 )
-RETURNS UUID AS $$
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = ''
+AS $$
 DECLARE
   v_report RECORD;
   v_matching_incident_id UUID;
@@ -424,7 +427,7 @@ BEGIN
     RETURN v_new_incident_id;
   END IF;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- ------------------------------------------------------------
 -- 6. ROW LEVEL SECURITY (RLS) POLICIES
@@ -436,10 +439,14 @@ DROP POLICY IF EXISTS "Allow user profile access" ON public.profiles;
 DROP POLICY IF EXISTS "Users can view own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 DROP POLICY IF EXISTS "Admins can view all profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.profiles;
 
 CREATE POLICY "Users can view own profile"
 ON public.profiles FOR SELECT TO authenticated
-USING (id = auth.uid() OR public.is_admin());
+USING (
+  id = auth.uid()
+  OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
+);
 
 CREATE POLICY "Users can update own profile"
 ON public.profiles FOR UPDATE TO authenticated
@@ -449,11 +456,16 @@ WITH CHECK (
   AND role = (SELECT role FROM public.profiles WHERE id = auth.uid())
 );
 
+CREATE POLICY "Users can insert own profile"
+ON public.profiles FOR INSERT TO authenticated
+WITH CHECK (id = auth.uid());
+
 -- Incidents RLS
 ALTER TABLE public.incidents ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public select incidents" ON public.incidents;
 DROP POLICY IF EXISTS "Authenticated can view incidents" ON public.incidents;
 DROP POLICY IF EXISTS "Admins can manage incidents" ON public.incidents;
+DROP POLICY IF EXISTS "Authenticated can insert incidents" ON public.incidents;
 
 CREATE POLICY "Authenticated can view incidents"
 ON public.incidents FOR SELECT TO authenticated
@@ -461,8 +473,8 @@ USING (true);
 
 CREATE POLICY "Admins can manage incidents"
 ON public.incidents FOR ALL TO authenticated
-USING (public.is_admin())
-WITH CHECK (public.is_admin());
+USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'))
+WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'));
 
 -- Reports RLS
 ALTER TABLE public.reports ENABLE ROW LEVEL SECURITY;
@@ -479,21 +491,20 @@ WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Users can view own reports"
 ON public.reports FOR SELECT TO authenticated
-USING (user_id = auth.uid());
+USING (
+  user_id = auth.uid()
+  OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
+);
 
 CREATE POLICY "Users can update own reports"
 ON public.reports FOR UPDATE TO authenticated
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
 
-CREATE POLICY "Admins can view all reports"
-ON public.reports FOR SELECT TO authenticated
-USING (public.is_admin());
-
 CREATE POLICY "Admins can update reports"
 ON public.reports FOR UPDATE TO authenticated
-USING (public.is_admin())
-WITH CHECK (public.is_admin());
+USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'))
+WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'));
 
 -- Report Media RLS
 ALTER TABLE public.report_media ENABLE ROW LEVEL SECURITY;
@@ -508,8 +519,9 @@ USING (
   EXISTS (
     SELECT 1 FROM public.reports r
     WHERE r.id = report_media.report_id
-      AND (r.user_id = auth.uid() OR public.is_admin())
+      AND r.user_id = auth.uid()
   )
+  OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
 );
 
 CREATE POLICY "Users can insert own report media"
@@ -528,8 +540,9 @@ USING (
   EXISTS (
     SELECT 1 FROM public.reports r
     WHERE r.id = report_media.report_id
-      AND (r.user_id = auth.uid() OR public.is_admin())
+      AND r.user_id = auth.uid()
   )
+  OR EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin')
 );
 
 -- Notifications RLS
@@ -539,6 +552,9 @@ DROP POLICY IF EXISTS "Users can insert own notifications" ON public.notificatio
 DROP POLICY IF EXISTS "Users can view own notifications" ON public.notifications;
 DROP POLICY IF EXISTS "Users can update own notifications" ON public.notifications;
 DROP POLICY IF EXISTS "Admins can create notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Users and Admins can insert notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Authenticated can insert notifications" ON public.notifications;
+DROP POLICY IF EXISTS "Users can delete own notifications" ON public.notifications;
 
 CREATE POLICY "Users can view own notifications"
 ON public.notifications FOR SELECT TO authenticated
@@ -549,18 +565,29 @@ ON public.notifications FOR UPDATE TO authenticated
 USING (user_id = auth.uid())
 WITH CHECK (user_id = auth.uid());
 
-CREATE POLICY "Users and Admins can insert notifications"
+-- Allow any authenticated user to create notifications (for cross-user alerts after report submission)
+CREATE POLICY "Authenticated can insert notifications"
 ON public.notifications FOR INSERT TO authenticated
-WITH CHECK (user_id = auth.uid() OR public.is_admin());
+WITH CHECK (true);
+
+CREATE POLICY "Users can delete own notifications"
+ON public.notifications FOR DELETE TO authenticated
+USING (user_id = auth.uid());
 
 -- Dedupe Decisions RLS
 ALTER TABLE public.dedupe_decisions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Dedupe decisions access" ON public.dedupe_decisions;
 DROP POLICY IF EXISTS "Admins can view dedupe decisions" ON public.dedupe_decisions;
+DROP POLICY IF EXISTS "Authenticated can insert dedupe decisions" ON public.dedupe_decisions;
 
 CREATE POLICY "Admins can view dedupe decisions"
 ON public.dedupe_decisions FOR SELECT TO authenticated
-USING (public.is_admin());
+USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'));
+
+-- Allow inserts from SECURITY DEFINER functions (process_report_deduplication)
+CREATE POLICY "Authenticated can insert dedupe decisions"
+ON public.dedupe_decisions FOR INSERT TO authenticated
+WITH CHECK (true);
 
 -- Incident Assignments RLS
 ALTER TABLE public.incident_assignments ENABLE ROW LEVEL SECURITY;
@@ -569,8 +596,8 @@ DROP POLICY IF EXISTS "Admins can manage incident assignments" ON public.inciden
 
 CREATE POLICY "Admins can manage incident assignments"
 ON public.incident_assignments FOR ALL TO authenticated
-USING (public.is_admin())
-WITH CHECK (public.is_admin());
+USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'))
+WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'));
 
 -- Incident Status History RLS
 ALTER TABLE public.incident_status_history ENABLE ROW LEVEL SECURITY;
@@ -580,11 +607,11 @@ DROP POLICY IF EXISTS "Admins can create incident history" ON public.incident_st
 
 CREATE POLICY "Admins can view incident history"
 ON public.incident_status_history FOR SELECT TO authenticated
-USING (public.is_admin());
+USING (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'));
 
 CREATE POLICY "Admins can create incident history"
 ON public.incident_status_history FOR INSERT TO authenticated
-WITH CHECK (public.is_admin());
+WITH CHECK (EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role = 'admin'));
 
 -- User Preferences RLS
 ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;

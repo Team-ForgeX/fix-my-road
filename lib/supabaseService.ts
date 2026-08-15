@@ -1,13 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "./supabaseClient";
 import type { ReportStatus } from "../types/report";
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-export const supabase = createClient(
-  supabaseUrl || "https://placeholder.supabase.co",
-  supabaseAnonKey || "placeholder-key"
-);
 
 export type SaveReportPayload = {
   userId: string;
@@ -86,12 +78,6 @@ export async function createCitizenProfile(profile: {
  */
 export async function submitReportToSupabase(payload: SaveReportPayload) {
   try {
-    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes("placeholder")) {
-      return {
-        success: false,
-        error: "Supabase credentials not configured."
-      };
-    }
 
     // 1. Ensure profile exists in public.profiles table to prevent foreign key violation
     const { data: existingProfile } = await supabase
@@ -200,9 +186,6 @@ export async function submitReportToSupabase(payload: SaveReportPayload) {
  */
 export async function executeAdminAction(payload: AdminActionPayload) {
   try {
-    if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes("placeholder")) {
-      return { success: false };
-    }
 
     const { data: currentIncident, error: fetchErr } = await supabase
       .from("incidents")
