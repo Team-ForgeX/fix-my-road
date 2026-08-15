@@ -543,8 +543,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveReports(nextReports);
     saveNotifications(nextNotifications);
 
-    const dedupeDecision: "linked" | "new" = supaResult && "incidentId" in supaResult && supaResult.incidentId ? "linked" : "new";
-
+    const dedupeDecision: "new" | "linked" = supaResult && "incidentId" in supaResult && supaResult.incidentId ? "linked" : "new";
     return {
       success: true,
       dedupeDecision
