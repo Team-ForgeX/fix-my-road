@@ -8,7 +8,8 @@ export async function POST(request: Request) {
     const { code, action } = body;
 
     const supabase = createClient();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    const user = userData?.user;
 
     if (userError || !user) {
       return NextResponse.json(
@@ -59,6 +60,10 @@ export async function POST(request: Request) {
       p_code: code.trim()
     });
 
+    if (rpcError) {
+      console.warn("upgrade_to_admin RPC error:", rpcError);
+    }
+
     if (!rpcError && upgraded) {
       const { data: profile } = await supabase
         .from("profiles")
@@ -84,7 +89,15 @@ export async function POST(request: Request) {
         .select("id, full_name, role")
         .single();
 
-      if (!profileError && profile) {
+      if (profileError) {
+        console.error("Admin upgrade fallback DB error:", profileError);
+        return NextResponse.json(
+          { success: false, error: `Failed to update profile role in DB: ${profileError.message}` },
+          { status: 500 }
+        );
+      }
+
+      if (profile) {
         return NextResponse.json({
           success: true,
           message: "Account elevated to admin successfully.",

@@ -23,7 +23,8 @@ export async function PATCH(request: Request) {
   try {
     // Verify authenticated user is an admin
     const supabaseServer = createClient();
-    const { data: { user }, error: userError } = await supabaseServer.auth.getUser();
+    const { data: userData, error: userError } = await supabaseServer.auth.getUser();
+    const user = userData?.user;
 
     if (userError || !user) {
       return NextResponse.json(

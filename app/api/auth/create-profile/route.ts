@@ -7,7 +7,8 @@ export async function POST(request: Request) {
   try {
     // Verify authenticated user
     const supabaseServer = createClient();
-    const { data: { user }, error: userError } = await supabaseServer.auth.getUser();
+    const { data: userData, error: userError } = await supabaseServer.auth.getUser();
+    const user = userData?.user;
 
     if (userError || !user) {
       return NextResponse.json(
@@ -29,16 +30,16 @@ export async function POST(request: Request) {
     const adminDb = createAdminClient();
 
     // Verify the user exists and email is confirmed
-    const { data: userData, error: userDataError } = await adminDb.auth.admin.getUserById(user.id);
+    const { data: adminUserData, error: adminUserDataError } = await adminDb.auth.admin.getUserById(user.id);
 
-    if (userDataError || !userData?.user) {
+    if (adminUserDataError || !adminUserData?.user) {
       return NextResponse.json(
         { success: false, error: "User not found." },
         { status: 404 }
       );
     }
 
-    if (!userData.user.email_confirmed_at) {
+    if (!adminUserData.user.email_confirmed_at) {
       return NextResponse.json(
         { success: false, error: "Email not yet verified." },
         { status: 400 }
@@ -56,11 +57,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: "Profile already exists." });
     }
 
-    const detectedRole = userData.user.user_metadata?.role === "admin" || userData.user.user_metadata?.requested_role === "admin" ? "admin" : "client";
+    const detectedRole = adminUserData.user.user_metadata?.role === "admin" || adminUserData.user.user_metadata?.requested_role === "admin" ? "admin" : "client";
 
     const profileResult = await createCitizenProfile({
       id: user.id,
-      email: userData.user.email ?? null,
+      email: adminUserData.user.email ?? null,
       full_name: fullName.trim(),
       phone: phone || null,
       role: detectedRole

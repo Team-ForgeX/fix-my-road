@@ -71,6 +71,7 @@ export function SignupForm() {
         email,
         phone,
         password,
+        admin_code: adminCode
       });
 
       if (!result.success) {

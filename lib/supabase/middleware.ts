@@ -29,10 +29,8 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Authenticate user via Supabase Auth server
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser();
+  const user = data?.user;
 
   const pathname = request.nextUrl.pathname;
 

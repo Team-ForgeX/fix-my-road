@@ -253,12 +253,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .order("created_at", { ascending: false });
 
       if (!notifsErr && notifsData) {
+        const inferType = (n: any): AppNotification["type"] => {
+          const t = (n.title || "").toLowerCase();
+          const m = (n.message || "").toLowerCase();
+          if (t.includes("submitted") || t.includes("received") || m.includes("submitted")) return "report_submitted";
+          if (t.includes("resolved") || m.includes("resolved") || m.includes("completed")) return "report_resolved";
+          if (t.includes("alert") || t.includes("new report")) return "new_report_alert";
+          if (t.includes("updated") || t.includes("status") || m.includes("status") || m.includes("updated")) return "report_updated";
+          if (n.report_id) return "report_updated";
+          return "system";
+        };
+
         const mappedNotifs: AppNotification[] = notifsData.map((n: any) => ({
           id: n.id,
-          type: n.report_id ? "report_updated" : "system",
+          type: inferType(n),
           title: n.title,
           message: n.message,
-          priority: "medium",
+          priority: "medium" as const,
           reportId: n.report_id || undefined,
           timestamp: n.created_at,
           read: n.is_read
@@ -310,7 +321,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // 1. First, get the authenticated user so we know auth state before rendering
     const initAuth = async () => {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      const { data: userData } = await supabase.auth.getUser();
+      const currentUser = userData?.user;
 
       if (!mounted) return;
 
@@ -442,7 +454,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: data.error ?? "Unable to verify admin code." };
     }
 
-    const { data: { user: sessionUser } } = await supabase.auth.getUser();
+    const { data: userData } = await supabase.auth.getUser();
+    const sessionUser = userData?.user;
     if (sessionUser) {
       const refreshed = await loadProfile(sessionUser.id, sessionUser.email ?? "", Boolean(sessionUser.email_confirmed_at), "admin");
       if (refreshed.success && refreshed.user) {

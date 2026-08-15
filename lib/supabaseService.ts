@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+export { supabase };
 import type { ReportStatus } from "../types/report";
 
 export type SaveReportPayload = {
@@ -87,15 +88,16 @@ export async function submitReportToSupabase(payload: SaveReportPayload) {
       .maybeSingle();
 
     if (!existingProfile) {
-      const { data: authUser } = await supabase.auth.getUser();
-      if (authUser?.user) {
+      const { data: authData } = await supabase.auth.getUser();
+      const authUser = authData?.user;
+      if (authUser) {
         await supabase.from("profiles").upsert(
           {
-            id: authUser.user.id,
-            email: authUser.user.email || null,
-            full_name: (authUser.user.user_metadata?.full_name as string) || authUser.user.email?.split("@")[0] || "User",
-            phone: (authUser.user.user_metadata?.phone as string) || null,
-            role: (authUser.user.user_metadata?.requested_role as string) === "admin" ? "admin" : "client"
+            id: authUser.id,
+            email: authUser.email || null,
+            full_name: (authUser.user_metadata?.full_name as string) || authUser.email?.split("@")[0] || "User",
+            phone: (authUser.user_metadata?.phone as string) || null,
+            role: (authUser.user_metadata?.requested_role as string) === "admin" ? "admin" : "client"
           },
           { onConflict: "id" }
         );
@@ -231,12 +233,18 @@ export async function executeAdminAction(payload: AdminActionPayload) {
       .eq("incident_id", payload.incidentId);
 
     if (linkedReports && linkedReports.length > 0) {
+      const isResolved = payload.newStatus === "resolved";
+      const notifTitle = isResolved ? "Issue Resolved" : "Issue Status Updated";
+      const statusLabel = payload.newStatus.replace(/_/g, " ");
+
       const notifs = linkedReports.map((r) => ({
         user_id: r.user_id,
         report_id: r.id,
         incident_id: payload.incidentId,
-        title: "Issue Status Updated",
-        message: `Your reported issue status has been updated to "${payload.newStatus.replace("_", " ")}".`
+        title: notifTitle,
+        message: isResolved
+          ? `Great news! Your reported issue has been resolved. Thank you for helping improve our roads.`
+          : `Your reported issue status has been updated to "${statusLabel}".`
       }));
 
       await supabase.from("notifications").insert(notifs);

@@ -6,7 +6,8 @@ export async function GET(request: Request) {
   try {
     // Verify authenticated user
     const supabaseServer = createClient();
-    const { data: { user }, error: userError } = await supabaseServer.auth.getUser();
+    const { data: userData, error: userError } = await supabaseServer.auth.getUser();
+    const user = userData?.user;
 
     if (userError || !user) {
       return NextResponse.json(
@@ -59,7 +60,8 @@ export async function POST(request: Request) {
   try {
     // Verify authenticated user
     const supabaseServer = createClient();
-    const { data: { user }, error: userError } = await supabaseServer.auth.getUser();
+    const { data: userData, error: userError } = await supabaseServer.auth.getUser();
+    const user = userData?.user;
 
     if (userError || !user) {
       return NextResponse.json(

@@ -217,7 +217,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.validate_admin_signup_code(p_code TEXT)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = ''
+SECURITY DEFINER SET search_path = public, extensions
 AS $$
 DECLARE
   v_match BOOLEAN := FALSE;
@@ -240,7 +240,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.upgrade_to_admin(p_code TEXT)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = ''
+SECURITY DEFINER SET search_path = public, extensions
 AS $$
 DECLARE
   v_valid BOOLEAN;
@@ -333,7 +333,7 @@ CREATE OR REPLACE FUNCTION process_report_deduplication(
 )
 RETURNS UUID
 LANGUAGE plpgsql
-SECURITY DEFINER SET search_path = ''
+SECURITY DEFINER SET search_path = public, extensions
 AS $$
 DECLARE
   v_report RECORD;
@@ -635,6 +635,6 @@ WITH CHECK (user_id = auth.uid());
 -- ------------------------------------------------------------
 -- 7. TABLE PERMISSIONS (GRANTS)
 -- ------------------------------------------------------------
-GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, anon;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, anon;
-GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO authenticated, anon;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, anon, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, anon, service_role;
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA public TO authenticated, anon, service_role;
