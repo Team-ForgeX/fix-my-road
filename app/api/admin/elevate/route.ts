@@ -63,7 +63,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (code.trim() !== adminCode.trim()) {
+    if (code.trim().toLowerCase() !== adminCode.trim().toLowerCase()) {
       return NextResponse.json(
         { success: false, error: "Invalid admin access code." },
         { status: 401 }

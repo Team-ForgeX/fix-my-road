@@ -18,7 +18,8 @@ const citizenNavLinks = [
 
 const adminNavLinks = [
   { label: "Admin Panel", href: "/admin" },
-  { label: "Nearby Reports", href: "/nearby" },
+  { label: "All Reports", href: "/reports" },
+  { label: "Nearby Issues", href: "/nearby" },
   { label: "Notifications", href: "/notifications" },
   { label: "Profile", href: "/profile" }
 ];

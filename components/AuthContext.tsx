@@ -269,65 +269,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Helper to build and set user from a session user object
+  // Role is ALWAYS sourced from the DB profiles table, never from user_metadata
+  const resolveAndSetUser = async (sessionUser: { id: string; email?: string; email_confirmed_at?: string | null; user_metadata?: Record<string, unknown> }) => {
+    const isConfirmed = Boolean(sessionUser.email_confirmed_at);
+    // Metadata role is only used when creating a brand-new profile row for the first time
+    const signupMetaRole = normalizeRole(
+      (sessionUser.user_metadata?.role as string) ??
+      (sessionUser.user_metadata?.requested_role as string)
+    );
+    const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "", isConfirmed, signupMetaRole);
+
+    if (profileResult.success && profileResult.user) {
+      setUser(profileResult.user);
+      await syncUserData(profileResult.user.id, profileResult.user.role === "admin");
+    } else {
+      console.warn("Profile load failed — using metadata fallback:", profileResult.error);
+      const fallbackUser: AuthUser = {
+        id: sessionUser.id,
+        full_name: (sessionUser.user_metadata?.full_name as string) || sessionUser.email?.split("@")[0] || "User",
+        phone: (sessionUser.user_metadata?.phone as string) || null,
+        role: signupMetaRole,
+        email: sessionUser.email ?? "",
+        verified: isConfirmed,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      setUser(fallbackUser);
+      await syncUserData(fallbackUser.id, fallbackUser.role === "admin");
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
 
     setReports(initialReports());
     setNotifications(initialNotifications());
-
-<<<<<<< HEAD
-    // Helper to build and set user from a session user object
-    // Role is ALWAYS sourced from the DB profiles table, never from user_metadata
-    const resolveAndSetUser = async (sessionUser: { id: string; email?: string; email_confirmed_at?: string | null; user_metadata?: Record<string, unknown> }) => {
-=======
-    // Set up auth state listener
-    const subscription = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (!mounted) return;
-
-      const sessionUser = session?.user;
-
-      // If no session, clear user
-      if (!sessionUser?.id) {
-        setUser(null);
-        if (isInitializing) {
-          setReady(true);
-          isInitializing = false;
-        }
-        return;
-      }
-
-      // User has session, load profile and set user
->>>>>>> f637b6006ce757eb0ae9537fb7be28b1541eb93c
-      const isConfirmed = Boolean(sessionUser.email_confirmed_at);
-      // Metadata role is only used when creating a brand-new profile row for the first time
-      const signupMetaRole = normalizeRole(
-        (sessionUser.user_metadata?.role as string) ??
-        (sessionUser.user_metadata?.requested_role as string)
-      );
-      const profileResult = await loadProfile(sessionUser.id, sessionUser.email ?? "", isConfirmed, signupMetaRole);
-
-      if (!mounted) return;
-
-      if (profileResult.success && profileResult.user) {
-        // profileResult.user.role is already the DB role
-        setUser(profileResult.user);
-        await syncUserData(profileResult.user.id, profileResult.user.role === "admin");
-      } else {
-        console.warn("Profile load failed — using metadata fallback:", profileResult.error);
-        const fallbackUser: AuthUser = {
-          id: sessionUser.id,
-          full_name: (sessionUser.user_metadata?.full_name as string) || sessionUser.email?.split("@")[0] || "User",
-          phone: (sessionUser.user_metadata?.phone as string) || null,
-          role: signupMetaRole,
-          email: sessionUser.email ?? "",
-          verified: isConfirmed,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
-        setUser(fallbackUser);
-        await syncUserData(fallbackUser.id, fallbackUser.role === "admin");
-      }
-    };
 
     // 1. First, get the current session so we know auth state before rendering
     const initAuth = async () => {
@@ -585,12 +562,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: "Complete identity verification before submitting reports." };
     }
 
-<<<<<<< HEAD
-    // Submit report directly to Supabase
-    const submitRes = await submitReportToSupabase({
-=======
     const supaResult = await submitReportToSupabase({
->>>>>>> f637b6006ce757eb0ae9537fb7be28b1541eb93c
       userId: user.id,
       title,
       description: description.trim(),
@@ -602,22 +574,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       city: location.city,
       pincode: location.pincode,
       mediaFiles
-<<<<<<< HEAD
-=======
     }).catch((err) => {
       console.warn("Supabase background save fallback:", err);
       return null;
->>>>>>> f637b6006ce757eb0ae9537fb7be28b1541eb93c
     });
 
-    if (!submitRes.success) {
-      return { success: false, error: submitRes.error || "Failed to submit report." };
+    if (!supaResult?.success) {
+      return { success: false, error: supaResult?.error || "Failed to submit report." };
     }
 
     // 1. Create client notification in database
     await supabase.from("notifications").insert({
       user_id: user.id,
-      report_id: submitRes.reportId,
+      report_id: supaResult?.reportId,
       title: "Report Submitted",
       message: `Your report "${title.trim()}" has been submitted and is awaiting verification.`
     });
@@ -631,7 +600,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (admins && admins.length > 0) {
       const adminNotifs = admins.map((adm) => ({
         user_id: adm.id,
-        report_id: submitRes.reportId,
+        report_id: supaResult?.reportId,
         title: "New Report Alert",
         message: `New report: "${title.trim()}" in ${location.address}`
       }));
@@ -643,20 +612,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.localStorage.removeItem("fixmyroad_report_location");
     }
 
-<<<<<<< HEAD
-    // Sync state
     await syncUserData(user.id, user.role === "admin");
-    return { success: true };
-=======
-    saveReports(nextReports);
-    saveNotifications(nextNotifications);
 
     const dedupeDecision: "new" | "linked" = supaResult && "incidentId" in supaResult && supaResult.incidentId ? "linked" : "new";
     return {
       success: true,
       dedupeDecision
     };
->>>>>>> f637b6006ce757eb0ae9537fb7be28b1541eb93c
   };
 
   const updateReportStatus = async (reportId: string, status: Report["status"]) => {
